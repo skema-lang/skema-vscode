@@ -1,0 +1,418 @@
+/*
+ * The diagram, painted in the editor's own colours.
+ *
+ * The browser editor defines a `--sk-*` palette of its own. Here those same
+ * names are bound to VSCode's theme variables instead, so the same
+ * components come out in whatever theme the user actually runs - a diagram
+ * that stayed dark inside a light editor would read as a foreign window
+ * rather than as part of it. Every variable has a fallback, because a theme
+ * is free not to define one.
+ */
+
+:root {
+  --sk-bg: var(--vscode-editor-background, #1e1e1e);
+  --sk-surface: var(--vscode-editorWidget-background, #252526);
+  --sk-surface-raised: var(--vscode-editorHoverWidget-background, #2d2d30);
+  --sk-border: var(--vscode-widget-border, var(--vscode-panel-border, #454545));
+  --sk-accent: var(--vscode-focusBorder, #007fd4);
+  --sk-text: var(--vscode-editor-foreground, #ccc);
+  --sk-text-muted: var(--vscode-descriptionForeground, #9d9d9d);
+  --sk-text-faint: var(--vscode-disabledForeground, #7f7f7f);
+  --sk-danger: var(--vscode-errorForeground, #f48771);
+  --sk-warning: var(--vscode-editorWarning-foreground, #cca700);
+  --sk-ok: var(--vscode-charts-green, #89d185);
+  --sk-mono: var(--vscode-editor-font-family, ui-monospace, monospace);
+
+  /* Token colours for names and types in a node row. Bound to the chart
+     palette rather than to the editor's syntax colours: a theme's token
+     colours are not exposed to a webview, and the chart colours are the
+     one set every theme is required to define. */
+  --sk-declaration: var(--vscode-charts-green, #82d8b8);
+  --sk-type: var(--vscode-charts-orange, #e6c07b);
+  --sk-key: var(--vscode-charts-yellow, #f0b866);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background: var(--sk-bg);
+  color: var(--sk-text);
+  font-family: var(--vscode-font-family, system-ui, sans-serif);
+  font-size: var(--vscode-font-size, 13px);
+  overflow: hidden;
+}
+
+.shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.canvas {
+  flex: 1;
+  min-height: 0;
+}
+
+/* --- Status bar ------------------------------------------------------ */
+
+.status-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: 0 0 auto;
+  padding: 4px 10px;
+  border-top: 1px solid var(--sk-border);
+  background: var(--vscode-statusBar-background, var(--sk-surface-raised));
+  color: var(--sk-text-muted);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.status-bar button {
+  font: inherit;
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.status-bar__error {
+  color: var(--sk-danger);
+}
+
+.status-bar__warn {
+  color: var(--sk-warning);
+}
+
+.status-bar__ok {
+  color: var(--sk-ok);
+}
+
+.status-bar__status {
+  margin-left: auto;
+  color: var(--sk-text-faint);
+}
+
+/* --- Canvas ---------------------------------------------------------- */
+
+.react-flow {
+  --xy-background-color: var(--sk-bg);
+  --xy-edge-stroke: var(--sk-text-faint);
+  --xy-edge-stroke-selected: var(--sk-accent);
+}
+
+.react-flow__edge-text {
+  fill: var(--sk-text-muted);
+  font-size: 10px;
+}
+
+.react-flow__edge.edge-one-to-one .react-flow__edge-path {
+  stroke-dasharray: 6 3;
+}
+
+.react-flow__edge {
+  cursor: pointer;
+}
+
+.react-flow__controls-button {
+  background: var(--sk-surface-raised);
+  border-bottom: 1px solid var(--sk-border);
+  fill: var(--sk-text);
+}
+
+.react-flow__controls-button:hover {
+  background: var(--vscode-toolbar-hoverBackground, var(--sk-surface));
+}
+
+.react-flow__minimap {
+  background: var(--sk-surface);
+}
+
+.react-flow__attribution {
+  background: transparent;
+  color: var(--sk-text-faint);
+}
+
+/* --- A table node ---------------------------------------------------- */
+
+.table-node {
+  background: var(--node-body-bg, var(--sk-surface));
+  border: var(--node-border-width, 1px) var(--node-border-style, solid)
+    var(--node-border-color, var(--sk-border));
+  border-radius: 7px;
+  overflow: hidden;
+  font-family: var(--sk-mono);
+  font-size: 11px;
+  color: var(--sk-text);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+}
+
+.table-node.is-selected {
+  border-color: var(--sk-accent);
+}
+
+.table-node__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 10px;
+  background: var(--node-header-bg, var(--sk-surface-raised));
+  color: var(--node-header-fg, inherit);
+  border-bottom: 1px solid var(--sk-border);
+}
+
+.table-node__name {
+  font-weight: 700;
+  color: var(--node-header-fg, var(--sk-declaration));
+}
+
+.table-node__namespace {
+  color: var(--sk-text-faint);
+  font-size: 10px;
+}
+
+.table-node__columns {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+}
+
+.table-node__row {
+  position: relative;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  height: 22px;
+  padding: 0 10px;
+}
+
+.table-node__row:hover {
+  background: var(--vscode-list-hoverBackground, var(--sk-surface-raised));
+}
+
+.table-node__row.is-key .table-node__field {
+  color: var(--sk-key);
+}
+
+.table-node__row.is-backref {
+  color: var(--sk-text-faint);
+  font-style: italic;
+}
+
+.table-node__field {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.table-node__type {
+  color: var(--sk-type);
+  font-size: 10.5px;
+  white-space: nowrap;
+}
+
+.table-node__row.is-backref .table-node__type {
+  color: var(--sk-text-faint);
+}
+
+.table-node__flags {
+  color: var(--sk-text-faint);
+  font-size: 9.5px;
+  min-width: 16px;
+  text-align: right;
+}
+
+/* Connection points sit on every field row, so they must be unobtrusive:
+   visible enough to show where a line attaches, small enough not to read as
+   decoration. */
+.table-node__handle {
+  width: 6px;
+  height: 6px;
+  min-width: 6px;
+  min-height: 6px;
+  border: 1px solid var(--sk-border);
+  background: var(--sk-surface-raised);
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.table-node:hover .table-node__handle,
+.table-node.is-selected .table-node__handle {
+  opacity: 1;
+}
+
+.detail-anchor {
+  display: contents;
+}
+
+/* --- The hover card -------------------------------------------------- */
+
+.detail-card {
+  position: fixed;
+  z-index: 40;
+  /* Read-only: it must never take the pointer, or a card left open over a
+     node swallows the mousedown that starts a drag. */
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  background: var(--vscode-editorHoverWidget-background, var(--sk-surface-raised));
+  border: 1px solid var(--vscode-editorHoverWidget-border, var(--sk-border));
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  color: var(--sk-text);
+  font-size: 11px;
+}
+
+.detail-card__head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.detail-card__title {
+  font-family: var(--sk-mono);
+  font-weight: 650;
+  font-size: 12px;
+}
+
+.detail-card__subtitle {
+  font-family: var(--sk-mono);
+  color: var(--sk-text-muted);
+  font-size: 10.5px;
+}
+
+.detail-card__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.detail-card__badge {
+  padding: 0 6px;
+  border-radius: 9px;
+  background: var(--vscode-badge-background, #4d4d4d);
+  color: var(--vscode-badge-foreground, #fff);
+  font-size: 9.5px;
+  line-height: 16px;
+}
+
+.detail-card__facts {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.detail-card__fact {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.detail-card__fact dt {
+  min-width: 74px;
+  flex-shrink: 0;
+  color: var(--sk-text-muted);
+}
+
+.detail-card__fact dd {
+  margin: 0;
+  font-family: var(--sk-mono);
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+.detail-card__note {
+  margin: 0;
+  padding-top: 6px;
+  border-top: 1px solid var(--sk-border);
+  white-space: pre-wrap;
+}
+
+.detail-card__source {
+  margin: 0;
+  font-family: var(--sk-mono);
+  color: var(--sk-text-muted);
+}
+
+/* --- Toolbar --------------------------------------------------------- */
+
+.toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-end;
+}
+
+.toolbar__group {
+  display: flex;
+  border: 1px solid var(--sk-border);
+  border-radius: 5px;
+  overflow: hidden;
+  background: var(--sk-surface);
+}
+
+.toolbar__option {
+  font: inherit;
+  font-size: 11px;
+  padding: 3px 8px;
+  border: none;
+  background: transparent;
+  color: var(--sk-text-muted);
+  cursor: pointer;
+}
+
+.toolbar__option:hover {
+  background: var(--vscode-toolbar-hoverBackground, var(--sk-surface-raised));
+}
+
+.toolbar__option.is-active {
+  background: var(--vscode-button-background, var(--sk-accent));
+  color: var(--vscode-button-foreground, #fff);
+}
+
+.toolbar__switch {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border: 1px solid var(--sk-border);
+  border-radius: 5px;
+  background: var(--sk-surface);
+  color: var(--sk-text-muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+/* --- Empty states ---------------------------------------------------- */
+
+.diagram-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  height: 100%;
+  color: var(--sk-text-faint);
+}
+
+.diagram-empty pre {
+  font-family: var(--sk-mono);
+  background: var(--sk-surface);
+  border: 1px solid var(--sk-border);
+  border-radius: 6px;
+  padding: 10px 14px;
+  color: var(--sk-text-muted);
+}

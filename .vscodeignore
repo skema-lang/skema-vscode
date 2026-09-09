@@ -1,0 +1,13 @@
+.gitignore
+.vscode/**
+esbuild.mjs
+node_modules/**
+scripts/**
+shared/**
+src/**
+test/**
+tsconfig.json
+webview/**
+**/*.map
+**/*.ts
+!dist/**

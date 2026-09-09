@@ -1,0 +1,104 @@
+## skemavscode — GitLab CI/CD
+##
+## Two kinds of pipeline.
+##
+## On merge requests and the default branch: typecheck, test and bundle. No
+## Rust, no server binary — everything here is TypeScript, and the model
+## types are committed (`shared/skema.d.ts`, see `npm run sync:types`).
+##
+## On a tag: one **platform-specific VSIX per platform**, each with that
+## platform's `skema-lsp` pulled from the language project's package
+## registry (`npm run fetch:server`), plus one **platform-neutral VSIX** with
+## no server in it at all. The neutral one is not a leftover: it is what
+## macOS users install until there is a macOS runner to build a Darwin
+## binary on, and it works — the extension falls back to `skema.serverPath`
+## or a `skema-lsp` on `PATH`.
+##
+## Prerequisites in the GitLab project settings:
+##   - A `SKEMA_REGISTRY_TOKEN` CI variable (a `read_api` token for the
+##     language project) if that project is private. A public one needs
+##     nothing.
+##   - `VSCE_PAT` if the `publish` job below is ever enabled.
+
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+stages:
+  - check
+  - package
+
+default:
+  image: node:22-bookworm-slim
+  interruptible: true
+
+variables:
+  npm_config_cache: ${CI_PROJECT_DIR}/.npm
+
+.npm_cache: &npm_cache
+  key:
+    files:
+      - package-lock.json
+  paths:
+    - .npm
+  policy: pull-push
+
+check:
+  stage: check
+  cache: *npm_cache
+  script:
+    - npm ci --prefer-offline --no-audit --fund=false
+    - npm run typecheck
+    # The fixture test is the one thing the compiler cannot do for us: it
+    # checks that the language server's JSON still matches the vendored
+    # declarations the diagram is written against.
+    - npm test
+    - npm run build
+
+audit:
+  stage: check
+  cache: *npm_cache
+  needs: []
+  allow_failure: true
+  script:
+    - npm ci --prefer-offline --no-audit --fund=false
+    - npm audit --audit-level=high
+
+# One VSIX per platform, each carrying that platform's server.
+package:
+  stage: package
+  cache: *npm_cache
+  rules:
+    - if: $CI_COMMIT_TAG
+  parallel:
+    matrix:
+      - VSCE_TARGET:
+          - linux-x64
+          - win32-x64
+  script:
+    - npm ci --prefer-offline --no-audit --fund=false
+    - npm run build
+    - GITLAB_TOKEN="$SKEMA_REGISTRY_TOKEN" npm run fetch:server -- --target "$VSCE_TARGET"
+    - npx vsce package --no-dependencies --target "$VSCE_TARGET" --out "skemavscode-$VSCE_TARGET.vsix"
+  artifacts:
+    paths:
+      - "*.vsix"
+    expire_in: 1 month
+
+# The fallback artifact: no bundled server, installable anywhere — including
+# the platforms this pipeline cannot cross-compile for.
+package-neutral:
+  stage: package
+  cache: *npm_cache
+  rules:
+    - if: $CI_COMMIT_TAG
+  script:
+    - npm ci --prefer-offline --no-audit --fund=false
+    - npm run build
+    - npx vsce package --no-dependencies --out "skemavscode-universal.vsix"
+  artifacts:
+    paths:
+      - "*.vsix"
+    expire_in: 1 month

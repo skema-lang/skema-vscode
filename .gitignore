@@ -1,0 +1,6 @@
+node_modules/
+dist/
+# Pulled from the language repo's package registry at packaging time, never
+# committed - see scripts/fetch-server.mjs.
+server/
+*.vsix
