@@ -25,12 +25,14 @@
 ##   - A `SKEMA_REGISTRY_TOKEN` CI variable (a `read_api` token for the
 ##     language project) if that project is private. A public one needs
 ##     nothing.
-##   - A `RELEASE_TOKEN` CI variable, masked and protected. `CI_JOB_TOKEN`
-##     cannot push, so `adopt-release` cannot commit or tag without one. Use a
-##     **personal access token** with the `write_repository` scope, from an
-##     account that may push to the protected default branch — *not* a project
-##     access token: those are Premium on GitLab.com for projects in a group,
-##     and this one sits in `skema-language`.
+##   - Settings → CI/CD → Job token permissions → **Allow Git push requests to
+##     the repository**. Off by default; GA in GitLab 18.4 and available on
+##     every tier. This is what lets `adopt-release` commit and tag with
+##     nothing but `CI_JOB_TOKEN` — no personal or project access token.
+##   - A `RELEASE_TRIGGER_TOKEN` CI variable, masked and protected: a pipeline
+##     trigger token (Settings → CI/CD → Pipeline trigger tokens). A job-token
+##     push deliberately starts no pipeline, so the tag pipeline that packages
+##     the VSIX has to be asked for explicitly.
 ##   - Settings → CI/CD → Job token permissions: allow
 ##     `skema-language/skema` to trigger this project, or its trigger job
 ##     gets a 404.
@@ -157,6 +159,14 @@ adopt-release:
     # and GitLab then rejects the whole script as "not a string".
     - 'git diff --cached --quiet || git commit -m "chore(release): $SKEMA_RELEASE"'
     - 'git tag -a "$SKEMA_RELEASE" -m "chore(release): $SKEMA_RELEASE"'
-    - git remote set-url origin "https://oauth2:${RELEASE_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
+    # The job token does the pushing — no personal or project access token.
+    - git remote set-url origin "https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
     - git push origin "HEAD:${CI_DEFAULT_BRANCH}"
     - git push origin "$SKEMA_RELEASE"
+    # A job-token push starts no pipeline, so the tag pipeline that builds the
+    # VSIX has to be asked for. Without this the tag exists and nothing ships.
+    - |
+      curl --fail --silent --show-error --output /dev/null \
+        --form "token=${RELEASE_TRIGGER_TOKEN}" \
+        --form "ref=${SKEMA_RELEASE}" \
+        "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/trigger/pipeline"
