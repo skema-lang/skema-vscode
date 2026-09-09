@@ -121,9 +121,9 @@
     "typescript": "^5.7.2"
   },
   "skemaServer": {
-    "comment": "Which skema-lsp release `npm run fetch:server` bundles. Bump it when the language repo tags a new one.",
+    "comment": "Which skema-lsp release `npm run fetch:server` bundles. The release pipeline rewrites it (scripts/adopt-release.mjs) when the language repo tags a new one.",
     "version": "v0.1.0",
-    "project": "eieste/skema",
+    "project": "skema-language/skema",
     "registry": "https://gitlab.com"
   }
 }

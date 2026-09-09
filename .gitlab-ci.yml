@@ -14,10 +14,23 @@
 ## binary on, and it works — the extension falls back to `skema.serverPath`
 ## or a `skema-lsp` on `PATH`.
 ##
+## A third entry point: the language repo triggers this project when it tags
+## a release, with `SKEMA_RELEASE` set to that tag. The `adopt-release` job
+## then points package.json at the new server, mirrors the version, and tags
+## — which starts the ordinary tag pipeline above. So a language release ends
+## with a VSIX built against exactly that release, without anyone bumping
+## `skemaServer.version` by hand.
+##
 ## Prerequisites in the GitLab project settings:
 ##   - A `SKEMA_REGISTRY_TOKEN` CI variable (a `read_api` token for the
 ##     language project) if that project is private. A public one needs
 ##     nothing.
+##   - A `RELEASE_TOKEN` CI variable: a project access token with
+##     `write_repository`, masked and protected. `CI_JOB_TOKEN` cannot push,
+##     so `adopt-release` cannot commit or tag without it.
+##   - Settings → CI/CD → Job token permissions: allow
+##     `skema-language/skema` to trigger this project, or its trigger job
+##     gets a 404.
 ##   - `VSCE_PAT` if the `publish` job below is ever enabled.
 
 workflow:
@@ -29,6 +42,7 @@ workflow:
 stages:
   - check
   - package
+  - release
 
 default:
   image: node:22-bookworm-slim
@@ -102,3 +116,42 @@ package-neutral:
     paths:
       - "*.vsix"
     expire_in: 1 month
+
+# --------------------------------------------------------------------------
+# release (triggered by the language repo)
+# --------------------------------------------------------------------------
+
+# Adopts a language release: rewrite package.json, commit, tag. The tag is
+# the point — it starts the `package` jobs above, which are the ones that
+# build a VSIX. Nothing is packaged here.
+#
+# This runs in the same pipeline as `check`, and after it: the extension is
+# type-checked and tested against the new server version *before* the tag
+# exists, so a language release that breaks the extension leaves no tag
+# behind to clean up.
+adopt-release:
+  stage: release
+  variables:
+    # Needed to tell "already adopted" from "not yet": the default shallow
+    # clone carries no tags to check against.
+    GIT_DEPTH: 0
+    GIT_STRATEGY: clone
+  rules:
+    - if: $SKEMA_RELEASE && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  script:
+    - |
+      if git rev-parse -q --verify "refs/tags/$SKEMA_RELEASE" >/dev/null; then
+        echo "$SKEMA_RELEASE is already tagged here — nothing to adopt."
+        exit 0
+      fi
+    - node scripts/adopt-release.mjs "$SKEMA_RELEASE"
+    - git config user.email "${GITLAB_USER_EMAIL:-ci@skema-language}"
+    - git config user.name "${GITLAB_USER_NAME:-skema release}"
+    - git add package.json package-lock.json
+    # An empty diff is normal when only the language moved and this repo
+    # already pointed at that tag; the tag below is still worth having.
+    - git diff --cached --quiet || git commit -m "chore(release): $SKEMA_RELEASE"
+    - git tag -a "$SKEMA_RELEASE" -m "chore(release): $SKEMA_RELEASE"
+    - git remote set-url origin "https://oauth2:${RELEASE_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
+    - git push origin "HEAD:${CI_DEFAULT_BRANCH}"
+    - git push origin "$SKEMA_RELEASE"
