@@ -9,7 +9,7 @@ import { StrictMode, useEffect, useState, type JSX } from "react";
 import { createRoot } from "react-dom/client";
 
 import type { Diagnostic } from "../shared/skema";
-import { DiagramView } from "./diagram/DiagramView";
+import { DiagramPane } from "./diagram/DiagramPane";
 import { announceReady, onHostMessage, revealLocation } from "./host";
 import { usePreferences } from "./preferences";
 import { useProject } from "./store";
@@ -97,7 +97,7 @@ function App(): JSX.Element {
   return (
     <div className="shell">
       <div className="canvas">
-        {seen ? <DiagramView /> : <div className="diagram-empty">Waiting for the model…</div>}
+        {seen ? <DiagramPane /> : <div className="diagram-empty">Waiting for the model…</div>}
       </div>
       <StatusBar status={status} />
     </div>

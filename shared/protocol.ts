@@ -14,25 +14,22 @@
  * *what* was dragged, and the extension turns that into a `WorkspaceEdit`,
  * which is what puts a drag into VSCode's own undo history.
  */
-import type {
-  Diagnostic,
-  EnumMeta,
-  ExportedModel,
-  GroupMeta,
-  Location,
-  StyleBlock,
-  TableMeta,
-} from "./skema";
+import type { Diagnostic, EnumMeta, ExportedModel, GroupMeta, Location, TableMeta } from "./skema";
+// The payload types the diagram already defines are reused rather than
+// restated: `skema/model` exists to feed the diagram, so a second
+// description of the same shape could only ever drift from it. Both modules
+// are free of React, so importing them here does not pull a UI framework
+// into the extension host.
+import type { FileStyles } from "../webview/diagram/style";
+import type { DeclKind, DiagramPreferences } from "../webview/diagram/types";
+
+export type { DeclKind, DiagramPreferences, FileStyles };
 
 // ---------------------------------------------------------------- LSP side
 
 export const MODEL_REQUEST = "skema/model";
 export const POSITION_EDIT_REQUEST = "skema/positionEdit";
 export const MODEL_CHANGED_NOTIFICATION = "skema/modelChanged";
-
-/** Which declaration kind stores the position - they all store it the same
- *  way, in their own `Meta` block. */
-export type DeclKind = "table" | "enum" | "group";
 
 export interface ProjectFileRef {
   uri: string;
@@ -45,11 +42,6 @@ export interface FileMetas {
   tables: TableMeta[];
   enums: EnumMeta[];
   groups: GroupMeta[];
-}
-
-export interface FileStyles {
-  path: string;
-  blocks: StyleBlock[];
 }
 
 export interface ModelResponse {
@@ -90,12 +82,6 @@ export interface LspRange {
 }
 
 // ------------------------------------------------------------ webview side
-
-export interface DiagramPreferences {
-  edgeRouting: "bezier" | "smoothstep" | "step" | "straight";
-  snapToGrid: boolean;
-  gridSize: number;
-}
 
 /** Extension → webview. */
 export type HostMessage =

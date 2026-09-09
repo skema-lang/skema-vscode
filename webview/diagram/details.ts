@@ -6,7 +6,13 @@
  */
 import type { ExportedField, ExportedTable, Location } from "../../shared/skema";
 import { flagLabels } from "../model/flags";
-import type { DetailFact } from "./DetailCard";
+
+/** One labelled line of a hover card. Defined here, next to the code that
+ *  produces it, so the card itself stays a matter of presentation. */
+export interface DetailFact {
+  label: string;
+  value: string;
+}
 
 export function sourceLabel(location: Location | undefined): string | undefined {
   return location ? `${location.file}:${location.line}` : undefined;

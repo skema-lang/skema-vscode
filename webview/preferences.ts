@@ -17,18 +17,13 @@
  */
 import { create } from "zustand";
 
-import type { DiagramPreferences } from "../shared/protocol";
+// Which routings exist is the diagram's business - this store only records
+// which one the settings picked.
+import { EDGE_ROUTINGS, type DiagramPreferences, type EdgeRouting } from "./diagram/types";
 import { setPreference } from "./host";
 
-/** React Flow's built-in edge routings, in the order they are offered. */
-export const EDGE_ROUTINGS = [
-  { value: "bezier", label: "Curve" },
-  { value: "smoothstep", label: "Rounded" },
-  { value: "step", label: "Right angles" },
-  { value: "straight", label: "Straight" },
-] as const;
-
-export type EdgeRouting = (typeof EDGE_ROUTINGS)[number]["value"];
+export { EDGE_ROUTINGS };
+export type { EdgeRouting };
 
 export interface PreferencesState extends DiagramPreferences {
   /** Applies what the extension read from the settings. */

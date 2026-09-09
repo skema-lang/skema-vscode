@@ -8,8 +8,13 @@
  * recognize, key or value, is dropped without a word: a `Style` block is a
  * hint about appearance, never a reason to fail.
  */
-import type { FileStyles } from "../../shared/protocol";
 import type { MetaEntry, StyleBlock } from "../../shared/skema";
+
+/** One file's `Style` blocks, already parsed. */
+export interface FileStyles {
+  path: string;
+  blocks: StyleBlock[];
+}
 
 /** Style declarations exactly as written, keyed by property name. */
 export type Declarations = Record<string, string>;
@@ -184,9 +189,11 @@ function addBlock(block: StyleBlock, selectors: StyleRules, classes: StyleRules)
  * language allows only one `Project` block, and a stray one is not a
  * project-wide default.
  *
- * The blocks are read by the language server (`skema/model`) rather than
- * parsed here, which is the one difference from the browser editor's copy of
- * this file: there, the parser is in the page.
+ * The blocks arrive already parsed rather than as source text, so the
+ * cascade holds no opinion about *who* parsed them: in the browser that is
+ * `styleBlocks()` on the WASM module, in an editor extension it is the
+ * language server. Keeping the parse out of here is what lets one
+ * implementation serve both.
  */
 export function collectProjectStyles(files: FileStyles[], rootPath: string): ProjectStyles {
   const styles = emptyProjectStyles();

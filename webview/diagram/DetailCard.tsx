@@ -18,26 +18,10 @@
  * `pointer-events: none`, without which a card left open over a node
  * swallows the mousedown that starts a drag.
  */
-import { useCallback, useEffect, useRef, useState, type JSX, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type JSX } from "react";
 import { createPortal } from "react-dom";
 
-export interface DetailFact {
-  label: string;
-  value: string;
-}
-
-export interface DetailCardProps {
-  title: string;
-  /** A short qualifier under the title: a namespace, a type, a kind. */
-  subtitle?: string | undefined;
-  badges?: string[];
-  facts?: DetailFact[];
-  /** The model's own prose for this thing (`note = "…"`). */
-  note?: string | undefined;
-  /** Where it is written, shown as `file:line`. */
-  source?: string | undefined;
-  children: ReactNode;
-}
+import type { DetailCardProps } from "./types";
 
 const OPEN_DELAY_MS = 350;
 const CLOSE_DELAY_MS = 80;

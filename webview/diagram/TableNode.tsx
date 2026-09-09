@@ -10,8 +10,7 @@ import { Handle, Position, type NodeProps } from "@xyflow/react";
 import type { JSX } from "react";
 
 import type { ExportedField } from "../../shared/skema";
-import { revealField, revealTable } from "../host";
-import { DetailCard } from "./DetailCard";
+import { useDiagramChrome, useReveal } from "./context";
 import { sourceLabel, tableFacts } from "./details";
 import type { TableNodeData } from "./graph";
 import { nodeStyleVariables } from "./style";
@@ -29,6 +28,8 @@ export function nodeHeight(data: TableNodeData): number {
 
 export function TableNode({ data, selected }: NodeProps): JSX.Element {
   const { table, columns, backReferences, style } = data as unknown as TableNodeData;
+  const { DetailCard } = useDiagramChrome();
+  const { revealTable, revealField } = useReveal();
   const openField = (field: ExportedField): void => revealField(field);
 
   return (

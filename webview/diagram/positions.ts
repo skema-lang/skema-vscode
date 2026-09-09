@@ -2,23 +2,24 @@
  * Reading a diagram position out of the model's source.
  *
  * Positions live in the declaration itself, as the language's reserved
- * custom key (`docs/01`, 1.11):
+ * custom key (`docs/01`, 1.11: "custom keys must start with `x-` and be
+ * quoted ... passed through unchanged"):
  *
  *     Table Customer {
  *       Meta { "x-editorPosition" = "120,340"; }
  *     }
  *
- * so a layout travels with the file and shows up in a diff like any other
- * decision about the model.
+ * So a layout travels with the file, survives a different browser, and
+ * shows up in a diff like any other decision about the model.
  *
- * **Only the read side is here.** The browser editor's copy of this file
- * also builds the edit that writes a position back; in this extension that
- * is `skema/positionEdit` on the language server (`skema-api::position`),
- * for two reasons. The offsets belong to one exact revision of a file the
- * webview does not have - VSCode's documents live in the extension host -
- * and computing an edit from text the view never saw is how a drag would
- * eventually land in the wrong place. And the rule for where a `Meta` entry
- * goes is language knowledge; it already exists once, in Rust.
+ * **Only the read side is here**, and that split is deliberate rather than
+ * tidiness: reading needs nothing but the `Meta` entries, so every host that
+ * draws the diagram can do it, while writing needs the file's exact current
+ * text and belongs to whoever owns it. See `positionEdits.ts`.
+ *
+ * One coordinate system per element, decided by group membership: a table
+ * or enum listed in a `Group` stores its position **relative to that
+ * group's frame**, everything else stores an absolute canvas position.
  */
 import type { MetaEntry } from "../../shared/skema";
 

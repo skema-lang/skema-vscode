@@ -35,11 +35,13 @@ import {
 import "@xyflow/react/dist/style.css";
 
 import type { Location } from "../../shared/skema";
-import { useProject } from "../store";
-import { usePreferences } from "../preferences";
-import { revealLocation } from "../host";
-import { DiagramToolbar } from "./DiagramToolbar";
-import { applyPositionEdit } from "../host";
+import { DiagramContextProvider } from "./context";
+import type {
+  DiagramChrome,
+  DiagramHost,
+  DiagramPreferences,
+  DiagramSource,
+} from "./types";
 import {
   edgeSides,
   nodeData,
@@ -56,15 +58,18 @@ import { NODE_WIDTH, TableNode, nodeHeight } from "./TableNode";
 
 const nodeTypes = { table: TableNode };
 
-function DiagramCanvas(): JSX.Element {
-  const analysis = useProject((s) => s.analysis);
-  const metas = useProject((s) => s.metas);
-  const projectStyles = useProject((s) => s.projectStyles);
-  const layout = useProject((s) => s.layout);
-  const rememberLayout = useProject((s) => s.rememberLayout);
-  const edgeRouting = usePreferences((s) => s.edgeRouting);
-  const snapToGrid = usePreferences((s) => s.snapToGrid);
-  const gridSize = usePreferences((s) => s.gridSize);
+export interface DiagramViewProps {
+  /** `null` while the host has no analysis yet - the canvas says so. */
+  source: DiagramSource | null;
+  preferences: DiagramPreferences;
+  host: DiagramHost;
+  chrome: DiagramChrome;
+}
+
+function DiagramCanvas({ source, preferences, host, chrome }: DiagramViewProps): JSX.Element {
+  const { rememberLayout, applyPositionEdit, revealLocation } = host;
+  const { edgeRouting, snapToGrid, gridSize } = preferences;
+  const Toolbar = chrome.Toolbar;
 
   const [nodes, setNodes] = useState<Node[]>([]);
   /** The same list, readable from a drag handler without making every
@@ -77,8 +82,8 @@ function DiagramCanvas(): JSX.Element {
   /** The model's own view of the diagram, rebuilt only when the model or
    *  the stored positions actually change. */
   const model = useMemo(() => {
-    const exported = analysis?.model;
-    if (!exported) return null;
+    if (!source) return null;
+    const { model: exported, metas, projectStyles, layout } = source;
 
     const relations = relationEdges(exported);
     const data = new Map<string, TableNodeData>(
@@ -128,7 +133,7 @@ function DiagramCanvas(): JSX.Element {
     }
 
     return { data, placed, relations };
-  }, [analysis, metas, projectStyles, layout, rememberLayout]);
+  }, [source, rememberLayout]);
 
   // Reconcile the model into the live nodes: content and stored positions
   // come from the model, while selection, measured size and an in-flight
@@ -247,13 +252,16 @@ function DiagramCanvas(): JSX.Element {
 
   /** One write per table that actually moved, whether one was dragged or a
    *  whole selection was. */
-  const persistPositions = useCallback((moved: Node[]) => {
-    for (const node of moved) {
-      dragging.current.delete(node.id);
-      const data = node.data as unknown as TableNodeData;
-      applyPositionEdit(data.table.file, data.table.name, node.position);
-    }
-  }, []);
+  const persistPositions = useCallback(
+    (moved: Node[]) => {
+      for (const node of moved) {
+        dragging.current.delete(node.id);
+        const data = node.data as unknown as TableNodeData;
+        applyPositionEdit(data.table.file, data.table.name, node.position, "table");
+      }
+    },
+    [applyPositionEdit],
+  );
 
   const onNodeDragStop = useCallback(
     (_: unknown, node: Node) => {
@@ -273,12 +281,15 @@ function DiagramCanvas(): JSX.Element {
   );
 
   // Clicking a line goes to where that relationship is written.
-  const onEdgeClick = useCallback((_: unknown, edge: Edge) => {
-    const location = (edge.data as { location?: Location } | undefined)?.location;
-    if (location) revealLocation(location);
-  }, []);
+  const onEdgeClick = useCallback(
+    (_: unknown, edge: Edge) => {
+      const location = (edge.data as { location?: Location } | undefined)?.location;
+      if (location) revealLocation(location);
+    },
+    [revealLocation],
+  );
 
-  if (!analysis) return <div className="diagram-empty">Analyzing…</div>;
+  if (!source) return <div className="diagram-empty">Analyzing…</div>;
   if (nodes.length === 0) {
     return (
       <div className="diagram-empty">
@@ -311,7 +322,7 @@ function DiagramCanvas(): JSX.Element {
       proOptions={{ hideAttribution: false }}
       minZoom={0.15}
     >
-      <DiagramToolbar />
+      {Toolbar ? <Toolbar /> : null}
       <Background gap={snapToGrid ? gridSize : 18} size={1} />
       <Controls showInteractive={false} />
       <MiniMap
@@ -328,10 +339,17 @@ function DiagramCanvas(): JSX.Element {
   );
 }
 
-export function DiagramView(): JSX.Element {
+export function DiagramView(props: DiagramViewProps): JSX.Element {
+  const { host, chrome } = props;
+  // Memoized because the nodes React Flow renders read this on every pass;
+  // a fresh object per render would re-render every node for nothing.
+  const context = useMemo(() => ({ host, chrome }), [host, chrome]);
+
   return (
-    <ReactFlowProvider>
-      <DiagramCanvas />
-    </ReactFlowProvider>
+    <DiagramContextProvider value={context}>
+      <ReactFlowProvider>
+        <DiagramCanvas {...props} />
+      </ReactFlowProvider>
+    </DiagramContextProvider>
   );
 }

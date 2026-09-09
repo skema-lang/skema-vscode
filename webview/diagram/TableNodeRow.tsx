@@ -13,7 +13,7 @@ import { Handle, Position } from "@xyflow/react";
 import type { JSX } from "react";
 
 import type { ExportedField } from "../../shared/skema";
-import { DetailCard } from "./DetailCard";
+import { useDiagramChrome } from "./context";
 import { hasFlag } from "../model/flags";
 import { fieldFacts, flagBadges, sourceLabel, typeLabel } from "./details";
 import { sourceHandleId, targetHandleId } from "./graph";
@@ -33,6 +33,7 @@ export interface TableNodeRowProps {
 }
 
 export function TableNodeRow({ field, tableFile, onOpen }: TableNodeRowProps): JSX.Element {
+  const { DetailCard } = useDiagramChrome();
   const isBackReference = field.relation?.kind === "ManyToOne";
 
   return (
