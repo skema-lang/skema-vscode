@@ -25,9 +25,12 @@
 ##   - A `SKEMA_REGISTRY_TOKEN` CI variable (a `read_api` token for the
 ##     language project) if that project is private. A public one needs
 ##     nothing.
-##   - A `RELEASE_TOKEN` CI variable: a project access token with
-##     `write_repository`, masked and protected. `CI_JOB_TOKEN` cannot push,
-##     so `adopt-release` cannot commit or tag without it.
+##   - A `RELEASE_TOKEN` CI variable, masked and protected. `CI_JOB_TOKEN`
+##     cannot push, so `adopt-release` cannot commit or tag without one. Use a
+##     **personal access token** with the `write_repository` scope, from an
+##     account that may push to the protected default branch — *not* a project
+##     access token: those are Premium on GitLab.com for projects in a group,
+##     and this one sits in `skema-language`.
 ##   - Settings → CI/CD → Job token permissions: allow
 ##     `skema-language/skema` to trigger this project, or its trigger job
 ##     gets a 404.
@@ -150,8 +153,10 @@ adopt-release:
     - git add package.json package-lock.json
     # An empty diff is normal when only the language moved and this repo
     # already pointed at that tag; the tag below is still worth having.
-    - git diff --cached --quiet || git commit -m "chore(release): $SKEMA_RELEASE"
-    - git tag -a "$SKEMA_RELEASE" -m "chore(release): $SKEMA_RELEASE"
+    # Single-quoted: a bare scalar containing ": " is read as a YAML mapping,
+    # and GitLab then rejects the whole script as "not a string".
+    - 'git diff --cached --quiet || git commit -m "chore(release): $SKEMA_RELEASE"'
+    - 'git tag -a "$SKEMA_RELEASE" -m "chore(release): $SKEMA_RELEASE"'
     - git remote set-url origin "https://oauth2:${RELEASE_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
     - git push origin "HEAD:${CI_DEFAULT_BRANCH}"
     - git push origin "$SKEMA_RELEASE"
