@@ -79,14 +79,53 @@ function keywordParser(...allowed: string[]): ValueParser {
   };
 }
 
-export const parseWidth = keywordParser("thin", "medium", "thick");
+/**
+ * A CSS length, as `docs/03` writes them. Its own examples use `3px` for a
+ * `borderWidth` and `1.1em` for a `fontSize` - a renderer that accepted only
+ * keywords silently dropped the reference model's own styling, which is
+ * exactly the failure a "hint about appearance, never a reason to fail"
+ * policy makes invisible.
+ *
+ * Still a closed vocabulary, and deliberately a narrow one: absolute and
+ * font-relative units only. Viewport units would tie a node's border to the
+ * size of whatever window it is drawn in, and `calc()` is an expression
+ * language this has no business evaluating.
+ */
+function lengthParser(units: string, ...keywords: string[]): ValueParser {
+  const pattern = new RegExp(`^\\d+(?:\\.\\d+)?(?:${units})$`);
+  const keyword = keywordParser(...keywords);
+  return (raw) => {
+    const value = raw.trim().toLowerCase();
+    return keyword(value) ?? (pattern.test(value) ? value : undefined);
+  };
+}
+
+const LENGTH_UNITS = "px|em|rem|pt";
+
+export const parseWidth = lengthParser(LENGTH_UNITS, "thin", "medium", "thick");
 export const parseLineStyle = keywordParser("solid", "dashed", "dotted");
-export const parseFontSize = keywordParser("small", "medium", "large", "x-large");
+/** A percentage sizes a font against its parent; it means nothing for a
+ *  border width, so only this one takes it. */
+export const parseFontSize = lengthParser(
+  `${LENGTH_UNITS}|%`,
+  "small",
+  "medium",
+  "large",
+  "x-large",
+);
 
 /** A table box and an enum box are the same shape, so they paint the same. */
 const BOX_PROPERTIES: PropertyCatalog = {
   headerBackgroundColor: parseColor,
   headerTextColor: parseColor,
+  /**
+   * `docs/03` lists `backgroundColor` under "@document, classes" - and its
+   * own example assigns the class `historisch { backgroundColor = "#f0f0f0" }`
+   * to a `Table`. So a box has to honour it, and on a box it means the body,
+   * which `bodyBackgroundColor` names explicitly. Both are accepted; the
+   * explicit one wins when a style sets both (see `NODE_VARIABLES`).
+   */
+  backgroundColor: parseColor,
   bodyBackgroundColor: parseColor,
   borderColor: parseColor,
   borderWidth: parseWidth,
@@ -261,6 +300,8 @@ export function resolveDocumentStyle(styles: ProjectStyles, file: string): Resol
 const NODE_VARIABLES: Record<string, string> = {
   headerBackgroundColor: "--node-header-bg",
   headerTextColor: "--node-header-fg",
+  // Both name the body; the explicit one is applied last, so it wins.
+  backgroundColor: "--node-body-bg",
   bodyBackgroundColor: "--node-body-bg",
   borderColor: "--node-border-color",
   borderWidth: "--node-border-width",

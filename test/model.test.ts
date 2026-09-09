@@ -21,6 +21,7 @@ import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 
 import type { ModelResponse } from "../shared/protocol";
+import type { MetaEntry } from "../shared/skema";
 import { nodeData, relationEdges, tableId } from "../webview/diagram/graph";
 import { readPosition } from "../webview/diagram/positions";
 import { collectProjectStyles, readStyleClasses, resolveTableStyle } from "../webview/diagram/style";
@@ -32,6 +33,19 @@ const fixture = JSON.parse(
 ) as ModelResponse;
 
 const ROOT = "/workspace/project.skema";
+
+/** A `Meta`/`Style` entry as the server reports one. The ranges are what an
+ *  editor would edit at, and irrelevant to anything asserted here. */
+function entry(key: string, value: string | undefined): MetaEntry {
+  const nowhere = { start: 0, end: 0 };
+  return {
+    key,
+    value,
+    keyRange: nowhere,
+    valueRange: value === undefined ? undefined : nowhere,
+    entryRange: nowhere,
+  };
+}
 
 test("the response fills the store the diagram reads", () => {
   useProject.getState().applyModel(fixture);
@@ -110,25 +124,51 @@ test("the Style cascade reaches a table through its class", () => {
   assert.equal(resolved["headerTextColor"], "white", "a CSS colour name is a colour");
   // ...and from the `core` class the table assigns itself.
   assert.equal(resolved["borderColor"], "#1f4e79");
-
-  // But not its `borderWidth`. The reference model writes `3px`, and the
-  // renderer's vocabulary for a width is `thin|medium|thick` - so the value
-  // is dropped without a word, exactly as the catalog says it should be
-  // ("a Style block is a hint about appearance, never a reason to fail").
-  // The browser editor drops it too; `docs/13` still lists the Style
-  // property catalog as unfinished, so whether a length should be legal
-  // there is a language question, not a rendering one.
-  assert.equal(resolved["borderWidth"], undefined);
+  // A length, which is how `docs/03` writes a border width in its own
+  // example. A keywords-only catalog dropped this silently.
+  assert.equal(resolved["borderWidth"], "3px");
 });
 
-test("a property that does not apply to a table is dropped without a word", () => {
+test("a class that styles a table's background reaches it", () => {
   const styles = collectProjectStyles(fixture.styles, ROOT);
-  // `historical` declares `backgroundColor`, which is a *group* property; a
-  // table box paints its body with `bodyBackgroundColor`. The language
-  // validates nothing here, so the renderer's catalog is the only gate.
+  // `docs/03` assigns exactly this class - `historisch { backgroundColor }` -
+  // to a `Table` in its own example, so a table box has to honour it.
   const resolved = resolveTableStyle(styles, "/workspace/lending.skema", ["historical"]);
-  assert.ok(!("backgroundColor" in resolved));
+  assert.equal(resolved["backgroundColor"], "#f0f0f0");
   assert.equal(resolved["headerBackgroundColor"], "#1f4e79", "the selector still applies");
+});
+
+test("an unrecognized property or value is still dropped without a word", () => {
+  // The gate is narrower than CSS on purpose: a `Style` block is a hint
+  // about appearance, never a reason to fail, and never a way to hand the
+  // renderer arbitrary CSS.
+  const styles = collectProjectStyles(
+    [
+      {
+        path: ROOT,
+        blocks: [
+          {
+            scope: "project",
+            selector: undefined,
+            className: "odd",
+            entries: [
+              entry("borderWidth", "calc(1px + 2px)"),
+              entry("borderColor", "rgba(0,0,0,0.5)"),
+              entry("boxShadow", "0 0 4px black"),
+              entry("borderStyle", "dashed"),
+            ],
+          },
+        ],
+      },
+    ],
+    ROOT,
+  );
+
+  const resolved = resolveTableStyle(styles, ROOT, ["odd"]);
+  assert.equal(resolved["borderWidth"], undefined, "an expression is not a length");
+  assert.equal(resolved["borderColor"], undefined, "alpha colours stay out");
+  assert.equal(resolved["boxShadow"], undefined, "an unknown property is not a property");
+  assert.equal(resolved["borderStyle"], "dashed", "the recognized one still lands");
 });
 
 test("a table with no stored position has none, and one written in is read back", () => {
@@ -138,17 +178,7 @@ test("a table with no stored position has none, and one written in is read back"
   assert.equal(readPosition(loan), undefined, "the reference model stores no layout");
 
   assert.deepEqual(
-    readPosition({
-      entries: [
-        {
-          key: "x-editorPosition",
-          value: "120,-4",
-          keyRange: { start: 0, end: 0 },
-          valueRange: { start: 0, end: 0 },
-          entryRange: { start: 0, end: 0 },
-        },
-      ],
-    }),
+    readPosition({ entries: [entry("x-editorPosition", "120,-4")] }),
     { x: 120, y: -4 },
   );
 });
