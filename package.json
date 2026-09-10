@@ -6,6 +6,10 @@
   "private": true,
   "license": "MIT",
   "publisher": "skema",
+  "repository": {
+    "type": "git",
+    "url": "https://gitlab.com/skema-language/skema-vscode.git"
+  },
   "engines": {
     "vscode": "^1.90.0"
   },

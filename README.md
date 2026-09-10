@@ -1,6 +1,6 @@
 # skema for VSCode
 
-Editing support and a live ER diagram for the [skema](../skema-lang)
+Editing support and a live ER diagram for the [skema](https://gitlab.com/skema-language/skema)
 modelling DSL: errors, hover, completion, go-to-definition, colouring and an
 outline from the language's own frontend, and the model as a diagram beside
 the text.
