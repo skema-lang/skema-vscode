@@ -2,13 +2,18 @@
  * Points this extension at a newly published language release.
  *
  * Run from the pipeline the language repo triggers on its tag. It rewrites
- * two things in package.json and nothing else:
+ * one thing in package.json and nothing else: `version`, the extension's own
+ * version, mirrored from the language tag so that "skema 0.2.0" means one
+ * thing across all three repos rather than three unrelated numbers a user
+ * has to correlate. `fetch:server` then derives which `skema-lsp` release to
+ * bundle from that same version - see skemaServer.comment in package.json -
+ * so there is nothing else here to keep in sync.
  *
- *   - `skemaServer.version` - which `skema-lsp` release `fetch:server` pulls
- *     into the VSIX. This is the one that decides what users actually run.
- *   - `version` - the extension's own version, mirrored from the language
- *     tag so that "skema 0.2.0" means one thing across all three repos
- *     rather than three unrelated numbers a user has to correlate.
+ * This is also why tagging this repo directly (`git tag vX.Y.Z` after
+ * bumping `version` to match) is a valid release on its own, with no need to
+ * go through this script or the language repo's trigger: the tag pipeline's
+ * `package` job resolves the right `skema-lsp` build from `version` either
+ * way.
  *
  * It deliberately does not commit, tag, or publish: the CI job does that, so
  * this can be run locally to see the diff first.
@@ -52,7 +57,6 @@ function patch(file, edit) {
 
 patch("package.json", (manifest) => {
   manifest.version = version;
-  manifest.skemaServer = { ...manifest.skemaServer, version: tag };
 });
 
 // npm keeps the version in two places in the lockfile, and `npm ci` compares

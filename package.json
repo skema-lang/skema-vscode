@@ -125,8 +125,7 @@
     "typescript": "^5.7.2"
   },
   "skemaServer": {
-    "comment": "Which skema-lsp release `npm run fetch:server` bundles. The release pipeline rewrites it (scripts/adopt-release.mjs) when the language repo tags a new one.",
-    "version": "v0.1.0",
+    "comment": "Which skema-lsp release `npm run fetch:server` bundles: this extension's own `version` above, tag-prefixed. skema, skema-vscode and skema-editor move in lockstep by convention, so \"skema-vscode 0.2.0\" always means skema-lsp v0.2.0 - no separate version to keep in sync here. Override with SKEMA_SERVER_VERSION to pull a different one on purpose.",
     "project": "skema-language/skema",
     "registry": "https://gitlab.com"
   }

@@ -4,8 +4,10 @@
  * The binary is *not* committed here. It is a release artifact of the
  * language repo, published to that project's GitLab generic package registry
  * on a tag, and pulled in at packaging time - so this repo carries no
- * megabyte-sized blob per platform, and the extension's version pins exactly
- * which server it ships with (`skemaServer.version` in package.json).
+ * megabyte-sized blob per platform, and the extension's own `version` in
+ * package.json pins exactly which server it ships with (skema, skema-vscode
+ * and skema-editor move in lockstep by convention, so tagging this repo
+ * vX.Y.Z is enough to pull skema-lsp vX.Y.Z - no separate version to update).
  *
  * One binary per VSIX, because a VSIX is per platform: `vsce package
  * --target linux-x64` produces an artifact that only that platform ever
@@ -30,7 +32,10 @@ const root = resolve(here, "..");
 const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
 
 const config = manifest.skemaServer ?? {};
-const version = process.env.SKEMA_SERVER_VERSION ?? config.version;
+// The extension and the skema-lsp release it bundles move in lockstep - see
+// skemaServer.comment in package.json - so the extension's own version *is*
+// the language version, just tag-prefixed. No separate field to keep synced.
+const version = process.env.SKEMA_SERVER_VERSION ?? `v${manifest.version}`;
 const project = process.env.SKEMA_PROJECT ?? config.project;
 const host = process.env.SKEMA_REGISTRY ?? config.registry;
 
@@ -66,7 +71,7 @@ if (!triple) {
   process.exit(1);
 }
 if (!version) {
-  console.error("No server version. Set skemaServer.version in package.json or SKEMA_SERVER_VERSION.");
+  console.error("No server version. Set \"version\" in package.json or SKEMA_SERVER_VERSION.");
   process.exit(1);
 }
 

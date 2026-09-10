@@ -16,10 +16,16 @@
 ##
 ## A third entry point: the language repo triggers this project when it tags
 ## a release, with `SKEMA_RELEASE` set to that tag. The `adopt-release` job
-## then points package.json at the new server, mirrors the version, and tags
-## — which starts the ordinary tag pipeline above. So a language release ends
-## with a VSIX built against exactly that release, without anyone bumping
-## `skemaServer.version` by hand.
+## mirrors that version into package.json and tags — which starts the
+## ordinary tag pipeline above. So a language release ends with a VSIX built
+## against exactly that release, without anyone bumping a version by hand.
+##
+## Tagging this repo directly works too, with no `adopt-release` involved:
+## bump `version` in package.json to the language version being targeted,
+## commit, `git tag vX.Y.Z && git push origin vX.Y.Z`. `fetch:server` in the
+## `package` job below always resolves the `skema-lsp` build from this
+## extension's own `version` (see skemaServer.comment in package.json), so
+## whichever way the tag came to exist, it pulls the matching release.
 ##
 ## Prerequisites in the GitLab project settings:
 ##   - A `SKEMA_REGISTRY_TOKEN` CI variable (a `read_api` token for the
