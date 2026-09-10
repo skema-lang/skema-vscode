@@ -12,7 +12,10 @@
 ## no server in it at all. The neutral one is not a leftover: it is what
 ## macOS users install until there is a macOS runner to build a Darwin
 ## binary on, and it works — the extension falls back to `skema.serverPath`
-## or a `skema-lsp` on `PATH`.
+## or a `skema-lsp` on `PATH`. All three are then uploaded to this project's
+## own generic package registry (`publish-generic-package`) so they have a
+## permanent, directly downloadable URL — the `*.vsix` job artifacts above
+## still exist for quick pipeline-page access, but expire in a month.
 ##
 ## A third entry point: the language repo triggers this project when it tags
 ## a release, with `SKEMA_RELEASE` set to that tag. The `adopt-release` job
@@ -53,6 +56,7 @@ workflow:
 stages:
   - check
   - package
+  - publish
   - release
 
 default:
@@ -127,6 +131,36 @@ package-neutral:
     paths:
       - "*.vsix"
     expire_in: 1 month
+
+# --------------------------------------------------------------------------
+# publish (tags only)
+# --------------------------------------------------------------------------
+
+# Uploads every VSIX built above to this project's own generic package
+# registry, the same way skema itself publishes skema-lsp/skema-wasm. Job
+# artifacts (see `package`/`package-neutral`) expire in a month and exist for
+# quick access from the pipeline page; the registry copy is the durable one,
+# with a stable URL of the form
+#   .../api/v4/projects/<id>/packages/generic/skemavscode/<tag>/<file>.vsix
+# Just uploads pre-built artifacts, no Node needed.
+publish-generic-package:
+  stage: publish
+  image: curlimages/curl:latest
+  # `package` runs as a matrix (linux-x64, win32-x64); naming just the job
+  # pulls artifacts from every instance of it, not one arbitrarily chosen one.
+  needs:
+    - job: package
+      artifacts: true
+    - job: package-neutral
+      artifacts: true
+  rules:
+    - if: $CI_COMMIT_TAG
+  script:
+    - |
+      for f in *.vsix; do
+        curl --fail --header "JOB-TOKEN: ${CI_JOB_TOKEN}" --upload-file "$f" \
+          "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/skemavscode/${CI_COMMIT_TAG}/${f}"
+      done
 
 # --------------------------------------------------------------------------
 # release (triggered by the language repo)
