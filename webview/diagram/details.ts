@@ -4,7 +4,13 @@
  * Pure functions from the analysed model to the card's contents, kept out
  * of the components so the wording is in one place and testable on its own.
  */
-import type { ExportedEnum, ExportedField, ExportedTable, Location } from "../../shared/skema";
+import type {
+  ExportedEnum,
+  ExportedField,
+  ExportedGroup,
+  ExportedTable,
+  Location,
+} from "../../shared/skema";
 import { flagLabels } from "../model/flags";
 
 /** One labelled line of a hover card. Defined here, next to the code that
@@ -99,6 +105,25 @@ export function enumFacts(en: ExportedEnum): DetailFact[] {
     { label: "Values", value: String(en.entries.length) },
     { label: "Stored as", value: en.storedType },
   ];
+}
+
+/** A group's members are listed with their kind, because that is what the
+ *  source writes and what it is checked against (`docs/12`). */
+export function groupFacts(group: ExportedGroup): DetailFact[] {
+  const facts: DetailFact[] = [{ label: "Members", value: String(group.members.length) }];
+  if (group.members.length > 0) {
+    facts.push({
+      label: "Contains",
+      value: group.members
+        .map((member) =>
+          member.namespace
+            ? `${member.kind} ${member.namespace}.${member.name}`
+            : `${member.kind} ${member.name}`,
+        )
+        .join("\n"),
+    });
+  }
+  return facts;
 }
 
 /** A table's own note, which the model keeps on no field of its own - it

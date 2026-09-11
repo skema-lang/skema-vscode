@@ -11,7 +11,7 @@
  */
 import { createContext, useContext } from "react";
 
-import type { ExportedEnum, ExportedField, ExportedTable } from "../../shared/skema";
+import type { ExportedEnum, ExportedField, ExportedGroup, ExportedTable } from "../../shared/skema";
 import type { DiagramChrome, DiagramHost } from "./types";
 
 interface DiagramContextValue {
@@ -40,7 +40,7 @@ export function useDiagramChrome(): DiagramChrome {
 }
 
 /**
- * The two reveal helpers every node needs, as thin wrappers over the host's
+ * The reveal helpers every node needs, as thin wrappers over the host's
  * one. A declaration without a location is one the model could not place -
  * clicking it does nothing rather than throwing.
  */
@@ -48,6 +48,7 @@ export function useReveal(): {
   revealTable: (table: ExportedTable) => void;
   revealField: (field: ExportedField) => void;
   revealEnum: (en: ExportedEnum) => void;
+  revealGroup: (group: ExportedGroup) => void;
 } {
   const host = useDiagramHost();
   return {
@@ -59,6 +60,9 @@ export function useReveal(): {
     },
     revealEnum: (en) => {
       if (en.location) host.revealLocation(en.location);
+    },
+    revealGroup: (group) => {
+      if (group.location) host.revealLocation(group.location);
     },
   };
 }

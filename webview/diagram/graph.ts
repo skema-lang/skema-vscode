@@ -21,6 +21,7 @@ import type {
   ExportedEnumEntry,
   ExportedField,
   ExportedGroup,
+  ExportedGroupMember,
   ExportedModel,
   ExportedTable,
   Location,
@@ -104,6 +105,37 @@ export function enumId(namespace: string, name: string): string {
   return namespace ? `${namespace}.${name}` : name;
 }
 
+/** Same rule again, for a `Group` member naming one of those two. */
+export function groupMemberId(member: ExportedGroupMember): string {
+  return member.namespace ? `${member.namespace}.${member.name}` : member.name;
+}
+
+/** A `Group` is identified by its file as well as its name: group names are
+ *  unique within a file, not across the project, so the name alone would
+ *  collide between two files that each declare a `Group Core`. */
+export function groupId(group: ExportedGroup): string {
+  return `group:${group.file}:${group.name}`;
+}
+
+/** The member kinds the diagram draws a box for. A `Group` may name any
+ *  declaration whose kind matches (`docs/12`), including a `Partial`, which
+ *  has no node to put inside a frame. */
+const FRAMED_MEMBER_KINDS = new Set(["Table", "Enum"]);
+
+/** Which frame each box belongs to, by node id. A box belongs to at most one
+ *  (`docs/12`, "One table, one group"), so this is a plain map. */
+export function groupMembership(model: ExportedModel): Map<string, string> {
+  const frameOf = new Map<string, string>();
+  for (const group of model.groups) {
+    const frame = groupId(group);
+    for (const member of group.members) {
+      if (!FRAMED_MEMBER_KINDS.has(member.kind)) continue;
+      frameOf.set(groupMemberId(member), frame);
+    }
+  }
+  return frameOf;
+}
+
 export function isBackReference(field: ExportedField): boolean {
   return field.relation?.kind === "ManyToOne";
 }
@@ -119,6 +151,14 @@ export function nodeData(table: ExportedTable, style: ResolvedStyle): TableNodeD
 
 export function enumNodeData(en: ExportedEnum, style: ResolvedStyle): EnumNodeData {
   return { enum: en, entries: en.entries, style };
+}
+
+export function groupNodeData(
+  group: ExportedGroup,
+  style: ResolvedStyle,
+  size: { width: number; height: number },
+): GroupNodeData {
+  return { group, style, width: size.width, height: size.height };
 }
 
 export function relationEdges(model: ExportedModel): RelationEdge[] {

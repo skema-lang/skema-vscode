@@ -11,7 +11,7 @@
  */
 import type { ComponentType, ReactNode } from "react";
 
-import type { EnumMeta, ExportedModel, Location, TableMeta } from "../../shared/skema";
+import type { EnumMeta, ExportedModel, GroupMeta, Location, TableMeta } from "../../shared/skema";
 import type { DetailFact } from "./details";
 import type { Position } from "./positions";
 import type { ProjectStyles } from "./style";
@@ -52,6 +52,7 @@ export interface DiagramSource {
    *  stored position and of the assigned style classes. */
   metas: Record<string, TableMeta[]>;
   enumMetas: Record<string, EnumMeta[]>;
+  groupMetas: Record<string, GroupMeta[]>;
   projectStyles: ProjectStyles;
   /** Fallback positions for tables that carry no `x-editorPosition` yet. */
   layout: Record<string, Position>;

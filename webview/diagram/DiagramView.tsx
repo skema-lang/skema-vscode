@@ -19,7 +19,7 @@
  * throw the text pane around on every step.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { JSX } from "react";
+import type { CSSProperties, JSX } from "react";
 import {
   Background,
   Controls,
@@ -37,6 +37,15 @@ import "@xyflow/react/dist/style.css";
 import type { Location } from "../../shared/skema";
 import { DiagramContextProvider } from "./context";
 import { EnumNode, enumNodeHeight } from "./EnumNode";
+import { GROUP_DRAG_HANDLE, GroupNode } from "./GroupNode";
+import {
+  groupFrame,
+  toAnchor,
+  toChildPosition,
+  toStoredPosition,
+  type GroupFrame,
+  type MemberBox,
+} from "./groupFrame";
 import type {
   DeclKind,
   DiagramChrome,
@@ -48,20 +57,32 @@ import {
   edgeSides,
   enumId,
   enumNodeData,
+  groupId,
+  groupMemberId,
+  groupMembership,
+  groupNodeData,
   nodeData,
   relationEdges,
   sourceHandleId,
   tableId,
   targetHandleId,
   type EnumNodeData,
+  type GroupNodeData,
   type TableNodeData,
 } from "./graph";
 import { layoutGraph } from "./layout";
-import { readPosition } from "./positions";
-import { resolveEnumStyle, resolveTableStyle, readStyleClasses } from "./style";
+import { readPosition, type Position } from "./positions";
+import {
+  resolveEnumStyle,
+  resolveGroupStyle,
+  resolveTableStyle,
+  readStyleClasses,
+} from "./style";
 import { NODE_WIDTH, TableNode, nodeHeight } from "./TableNode";
 
-const nodeTypes = { table: TableNode, enum: EnumNode };
+const nodeTypes = { table: TableNode, enum: EnumNode, group: GroupNode };
+
+const ORIGIN: Position = { x: 0, y: 0 };
 
 /** One entry of the model's own view of the diagram - which kind of node it
  *  is decides both its React Flow `type` and how tall it lays out. */
@@ -73,15 +94,64 @@ function entryHeight(entry: NodeEntry): number {
   return entry.kind === "table" ? nodeHeight(entry.data) : enumNodeHeight(entry.data);
 }
 
+/** Everything about a node that the model decides, as opposed to what the
+ *  canvas does: selection, measured size and an in-flight drag are not in
+ *  here, because a re-analysis must not reset them. */
+interface NodeSpec {
+  id: string;
+  type: "table" | "enum" | "group";
+  position: Position;
+  data: Record<string, unknown>;
+  /** Set only on a box inside a frame, and only on a frame. */
+  parentId?: string;
+  width?: number;
+  height?: number;
+  dragHandle?: string;
+  style?: CSSProperties;
+}
+
+/**
+ * A frame must not take the pointer: it covers everything it contains, and
+ * a click on the canvas inside one has to reach the canvas. The label puts
+ * it back for itself (`styles.css`), which leaves that the only place to
+ * select or drag a frame by.
+ *
+ * It goes on the node rather than in the stylesheet because React Flow
+ * writes `pointer-events` inline on the wrapper, and only `node.style` is
+ * merged over it.
+ */
+const FRAME_STYLE: CSSProperties = { pointerEvents: "none" };
+
 /** What a drag needs to write back: which file, which declaration, which
  *  kind of `Meta` block it stores its position in. */
 function declRefOf(node: Node): { file: string; name: string; kind: DeclKind } {
+  if (node.type === "group") {
+    const data = node.data as unknown as GroupNodeData;
+    return { file: data.group.file, name: data.group.name, kind: "group" };
+  }
   if (node.type === "enum") {
     const data = node.data as unknown as EnumNodeData;
     return { file: data.enum.file, name: data.enum.name, kind: "enum" };
   }
   const data = node.data as unknown as TableNodeData;
   return { file: data.table.file, name: data.table.name, kind: "table" };
+}
+
+/**
+ * A node's position in the coordinate system its own `Meta` block stores.
+ *
+ * React Flow works in two: a frame sits at its own corner, and a box inside
+ * one sits relative to that corner. The model stores neither - a frame
+ * stores its anchor, a member its offset from that anchor (`positions.ts`),
+ * and `groupFrame.ts` is what converts between them.
+ */
+function storedPosition(node: Node, frames: Map<string, GroupFrame>): Position {
+  if (node.type === "group") {
+    const frame = frames.get(node.id);
+    return frame ? toAnchor(node.position, frame) : node.position;
+  }
+  const frame = node.parentId ? frames.get(node.parentId) : undefined;
+  return frame ? toStoredPosition(node.position, frame) : node.position;
 }
 
 export interface DiagramViewProps {
@@ -109,7 +179,7 @@ function DiagramCanvas({ source, preferences, host, chrome }: DiagramViewProps):
    *  the stored positions actually change. */
   const model = useMemo(() => {
     if (!source) return null;
-    const { model: exported, metas, enumMetas, projectStyles, layout } = source;
+    const { model: exported, metas, enumMetas, groupMetas, projectStyles, layout } = source;
 
     const relations = relationEdges(exported);
     const data = new Map<string, NodeEntry>();
@@ -127,9 +197,13 @@ function DiagramCanvas({ source, preferences, host, chrome }: DiagramViewProps):
       data.set(enumId(en.namespace, en.name), { kind: "enum", data: enumNodeData(en, style) });
     }
 
+    const frameOf = groupMembership(exported);
+
     // Source position wins; then one from an earlier pass; only a table or
-    // enum seen for the first time is laid out - see layout.ts.
-    const placed = new Map<string, { x: number; y: number }>();
+    // enum seen for the first time is laid out - see layout.ts. What the
+    // number *means* depends on group membership: an offset into the frame
+    // for a member, an absolute canvas position for everything else.
+    const placed = new Map<string, Position>();
     const unplaced: string[] = [];
     for (const table of exported.tables) {
       const id = tableId(table.namespace, table.name);
@@ -146,7 +220,17 @@ function DiagramCanvas({ source, preferences, host, chrome }: DiagramViewProps):
       else unplaced.push(id);
     }
 
-    if (unplaced.length > 0) {
+    const anchors = new Map<string, Position>();
+    const unplacedGroups: string[] = [];
+    for (const group of exported.groups) {
+      const id = groupId(group);
+      const stored = readPosition(groupMetas[group.file]?.find((m) => m.name === group.name));
+      const known = stored ?? layout[id];
+      if (known) anchors.set(id, known);
+      else unplacedGroups.push(id);
+    }
+
+    if (unplaced.length > 0 || unplacedGroups.length > 0) {
       const computed = layoutGraph({
         ids: [...data.keys()],
         edges: relations,
@@ -157,10 +241,28 @@ function DiagramCanvas({ source, preferences, host, chrome }: DiagramViewProps):
             height: entry ? entryHeight(entry) : 120,
           };
         },
+        groups: exported.groups.map((group) => ({
+          id: groupId(group),
+          memberIds: group.members.map(groupMemberId),
+        })),
       });
-      const fresh: Record<string, { x: number; y: number }> = {};
+      const fresh: Record<string, Position> = {};
+      for (const id of unplacedGroups) {
+        const position = computed.get(id) ?? ORIGIN;
+        anchors.set(id, position);
+        fresh[id] = position;
+      }
       for (const id of unplaced) {
-        const position = computed.get(id) ?? { x: 0, y: 0 };
+        const absolute = computed.get(id) ?? ORIGIN;
+        const frame = frameOf.get(id);
+        // A member is stored as an offset into its group, measured from the
+        // cluster this same pass produced - not from wherever the group's
+        // anchor already is, which would drag the whole frame across the
+        // canvas every time a table is added to it.
+        const cluster = frame ? (computed.get(frame) ?? ORIGIN) : ORIGIN;
+        const position = frame
+          ? { x: absolute.x - cluster.x, y: absolute.y - cluster.y }
+          : absolute;
         placed.set(id, position);
         fresh[id] = position;
       }
@@ -168,7 +270,50 @@ function DiagramCanvas({ source, preferences, host, chrome }: DiagramViewProps):
       queueMicrotask(() => rememberLayout(fresh));
     }
 
-    return { data, placed, relations };
+    const frames = new Map<string, GroupFrame>();
+    const specs: NodeSpec[] = [];
+    for (const group of exported.groups) {
+      const id = groupId(group);
+      const meta = groupMetas[group.file]?.find((m) => m.name === group.name);
+      const style = resolveGroupStyle(projectStyles, group.file, readStyleClasses(meta?.entries));
+      // A member the diagram draws no box for - a `Partial`, say - takes up
+      // no room in the frame, so it simply does not contribute one.
+      const boxes = group.members.flatMap((member): MemberBox[] => {
+        const memberId = groupMemberId(member);
+        const entry = data.get(memberId);
+        const at = placed.get(memberId);
+        return entry && at ? [{ ...at, width: NODE_WIDTH, height: entryHeight(entry) }] : [];
+      });
+      const frame = groupFrame(anchors.get(id) ?? ORIGIN, boxes);
+      frames.set(id, frame);
+      specs.push({
+        id,
+        type: "group",
+        position: frame.position,
+        width: frame.width,
+        height: frame.height,
+        dragHandle: GROUP_DRAG_HANDLE,
+        style: FRAME_STYLE,
+        data: groupNodeData(group, style, frame) as unknown as Record<string, unknown>,
+      });
+    }
+
+    // Frames come first: React Flow resolves a child against a parent it has
+    // already seen in this list, and warns and gives up on one it has not.
+    for (const [id, entry] of data) {
+      const frameId = frameOf.get(id);
+      const frame = frameId ? frames.get(frameId) : undefined;
+      const at = placed.get(id) ?? ORIGIN;
+      specs.push({
+        id,
+        type: entry.kind,
+        position: frame ? toChildPosition(at, frame) : at,
+        ...(frame && frameId ? { parentId: frameId } : {}),
+        data: entry.data as unknown as Record<string, unknown>,
+      });
+    }
+
+    return { specs, frames, relations };
   }, [source, rememberLayout]);
 
   // Reconcile the model into the live nodes: content and stored positions
@@ -181,19 +326,15 @@ function DiagramCanvas({ source, preferences, host, chrome }: DiagramViewProps):
     }
     setNodes((current) => {
       const existing = new Map(current.map((node) => [node.id, node]));
-      const next = [...model.data.entries()].map(([id, entry]) => {
-        const previous = existing.get(id);
+      const next = model.specs.map((spec) => {
+        const previous = existing.get(spec.id);
         const position =
-          previous && dragging.current.has(id)
-            ? previous.position
-            : (model.placed.get(id) ?? previous?.position ?? { x: 0, y: 0 });
-        return {
-          ...(previous ?? {}),
-          id,
-          type: entry.kind,
-          position,
-          data: entry.data as unknown as Record<string, unknown>,
-        };
+          previous && dragging.current.has(spec.id) ? previous.position : spec.position;
+        const node: Node = { ...previous, ...spec, position };
+        // A table dropped from a `Group` has to lose its frame, and `spec`
+        // says so by leaving the key out rather than setting it empty.
+        if (spec.parentId === undefined) delete node.parentId;
+        return node;
       });
       live.current = next;
       return next;
@@ -202,10 +343,17 @@ function DiagramCanvas({ source, preferences, host, chrome }: DiagramViewProps):
 
   const edges = useMemo((): Edge[] => {
     if (!model) return [];
+    const byId = new Map(nodes.map((node) => [node.id, node]));
     // Sides are decided from where the nodes actually are, so a line always
-    // leaves towards the other table instead of looping around its own.
-    const positionOf = (id: string): { x: number } | undefined =>
-      nodes.find((node) => node.id === id)?.position ?? model.placed.get(id);
+    // leaves towards the other table instead of looping around its own. A
+    // box inside a frame is positioned relative to it, so its own number
+    // says nothing about the gap to a box outside - only the sum does.
+    const positionOf = (id: string): { x: number } | undefined => {
+      const node = byId.get(id);
+      if (!node) return undefined;
+      const parent = node.parentId ? byId.get(node.parentId) : undefined;
+      return parent ? { x: node.position.x + parent.position.x } : node.position;
+    };
 
     return model.relations.map((relation) => {
       const sides = edgeSides(positionOf(relation.source), positionOf(relation.target), NODE_WIDTH);
@@ -258,8 +406,17 @@ function DiagramCanvas({ source, preferences, host, chrome }: DiagramViewProps):
   );
 
   const onNodeDragStart = useCallback((_: unknown, node: Node) => {
-    const others = live.current.filter((other) => other.selected && other.id !== node.id);
-    if (!node.selected || others.length === 0) {
+    const selected = live.current.filter((other) => other.selected);
+    // A frame already carries its own members, so a box selected next to the
+    // frame it sits in must not be given the same delta a second time.
+    const carried = new Set(
+      selected.filter((other) => other.type === "group").map((other) => other.id),
+    );
+    const isCarried = (other: Node): boolean =>
+      other.parentId !== undefined && carried.has(other.parentId);
+
+    const others = selected.filter((other) => other.id !== node.id && !isCarried(other));
+    if (!node.selected || isCarried(node) || others.length === 0) {
       groupDrag.current = null;
       return;
     }
@@ -287,24 +444,29 @@ function DiagramCanvas({ source, preferences, host, chrome }: DiagramViewProps):
   }, []);
 
   /**
-   * One write per table or enum that actually moved, whether one was dragged
+   * One write per box or frame that actually moved, whether one was dragged
    * or a whole selection was. Only reaches the source when `autoSavePositions`
    * is on; otherwise the position is remembered for this session only, the
    * same fallback an unplaced node gets on its first layout.
+   *
+   * A frame is one write however many members it holds: they are stored as
+   * offsets from its anchor, and dragging the frame changed only the anchor.
    */
   const persistPositions = useCallback(
     (moved: Node[]) => {
+      const frames = model?.frames;
       for (const node of moved) {
         dragging.current.delete(node.id);
+        const position = frames ? storedPosition(node, frames) : node.position;
         if (autoSavePositions) {
           const { file, name, kind } = declRefOf(node);
-          applyPositionEdit(file, name, node.position, kind);
+          applyPositionEdit(file, name, position, kind);
         } else {
-          rememberLayout({ [node.id]: node.position });
+          rememberLayout({ [node.id]: position });
         }
       }
     },
-    [applyPositionEdit, rememberLayout, autoSavePositions],
+    [applyPositionEdit, rememberLayout, autoSavePositions, model],
   );
 
   const onNodeDragStop = useCallback(

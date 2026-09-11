@@ -32,8 +32,14 @@ see *Where the server comes from*.
 
 - **A diagram that follows the text** (*skema: Show diagram*, or the icon in
   the editor title bar): tables with their columns, relationship lines
-  anchored to the exact field they connect, hover cards for the detail the
-  boxes leave out, and a routing mode you can switch.
+  anchored to the exact field they connect, a `Group` as a labelled frame
+  around its members, hover cards for the detail the boxes leave out, and a
+  routing mode you can switch.
+
+  A frame is sized by what it contains, so only its own corner is ever
+  stored: its members keep their positions relative to it, and dragging a
+  whole group by its label is one edit to the source rather than one per
+  table.
 
 - **Markdown documentation, live and exportable.** *skema: Show
   documentation* renders the resolved project - tables, columns, flags,

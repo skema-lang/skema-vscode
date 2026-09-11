@@ -396,6 +396,59 @@ body,
   cursor: pointer;
 }
 
+/* --- Group frames ----------------------------------------------------- */
+
+/* React Flow's own `group` node type paints a light slab, which this one
+   overrides wholesale. Whether the frame takes the pointer is not decided
+   here - React Flow writes that inline, so it is set on the node instead
+   (`DiagramView`, `FRAME_STYLE`). */
+.react-flow__node-group {
+  background: none;
+  border: none;
+  border-radius: 0;
+}
+
+/* The `--group-*` variables are what `Style @group` resolves to
+   (`diagram/style.ts`, `groupStyleVariables`). The frame is transparent
+   until the model says otherwise: a default fill would hide the canvas grid
+   for a decision nobody made. */
+.group-node {
+  box-sizing: border-box;
+  height: 100%;
+  border-radius: 10px;
+  background: var(--group-bg, transparent);
+  border: var(--group-border-width, 1px) var(--group-border-style, dashed)
+    var(--group-border-color, var(--sk-text-faint));
+}
+
+.group-node.is-selected {
+  border-color: var(--sk-accent);
+}
+
+/* The one solid part, and so the only thing to grab: `GroupNode` hands
+   React Flow this class as the node's drag handle. */
+.group-node__label {
+  display: inline-block;
+  margin: 5px 0 0 9px;
+  padding: 2px 9px;
+  pointer-events: all;
+  cursor: grab;
+  background: var(--sk-surface-raised);
+  border: 1px solid var(--sk-border);
+  border-radius: 5px;
+  color: var(--sk-text-muted);
+  font-family: var(--sk-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.group-node.is-selected .group-node__label {
+  color: var(--sk-text);
+  border-color: var(--sk-accent);
+}
+
 /* --- Empty states ---------------------------------------------------- */
 
 .diagram-empty {

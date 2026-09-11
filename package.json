@@ -115,6 +115,11 @@
           "description": "Write a dragged table or enum position into the .skema source immediately. When off, dragging still repositions it in the diagram, but the position stays in this panel only until turned on."
         }
       }
+    },
+    "configurationDefaults": {
+      "[skema]": {
+        "editor.showFoldingControls": "always"
+      }
     }
   },
   "scripts": {

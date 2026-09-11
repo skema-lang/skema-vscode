@@ -35,6 +35,7 @@ export function DiagramPane(): JSX.Element {
   const analysis = useProject((s) => s.analysis);
   const metas = useProject((s) => s.metas);
   const enumMetas = useProject((s) => s.enumMetas);
+  const groupMetas = useProject((s) => s.groupMetas);
   const projectStyles = useProject((s) => s.projectStyles);
   const layout = useProject((s) => s.layout);
 
@@ -44,8 +45,11 @@ export function DiagramPane(): JSX.Element {
   const autoSavePositions = usePreferences((s) => s.autoSavePositions);
 
   const source = useMemo<DiagramSource | null>(
-    () => (analysis ? { model: analysis.model, metas, enumMetas, projectStyles, layout } : null),
-    [analysis, metas, enumMetas, projectStyles, layout],
+    () =>
+      analysis
+        ? { model: analysis.model, metas, enumMetas, groupMetas, projectStyles, layout }
+        : null,
+    [analysis, metas, enumMetas, groupMetas, projectStyles, layout],
   );
 
   const preferences = useMemo(
