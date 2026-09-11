@@ -30,12 +30,14 @@ export interface PreferencesState extends DiagramPreferences {
   apply: (preferences: DiagramPreferences) => void;
   setEdgeRouting: (routing: EdgeRouting) => void;
   setSnapToGrid: (snap: boolean) => void;
+  setAutoSavePositions: (autoSave: boolean) => void;
 }
 
 export const usePreferences = create<PreferencesState>((set) => ({
   edgeRouting: "smoothstep",
   snapToGrid: false,
   gridSize: 16,
+  autoSavePositions: false,
 
   apply: (preferences) => set(preferences),
 
@@ -48,5 +50,9 @@ export const usePreferences = create<PreferencesState>((set) => ({
   setSnapToGrid: (snapToGrid) => {
     set({ snapToGrid });
     setPreference("snapToGrid", snapToGrid);
+  },
+  setAutoSavePositions: (autoSavePositions) => {
+    set({ autoSavePositions });
+    setPreference("autoSavePositions", autoSavePositions);
   },
 }));

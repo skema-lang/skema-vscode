@@ -11,7 +11,7 @@
  */
 import type { ComponentType, ReactNode } from "react";
 
-import type { ExportedModel, Location, TableMeta } from "../../shared/skema";
+import type { EnumMeta, ExportedModel, Location, TableMeta } from "../../shared/skema";
 import type { DetailFact } from "./details";
 import type { Position } from "./positions";
 import type { ProjectStyles } from "./style";
@@ -34,6 +34,11 @@ export interface DiagramPreferences {
   edgeRouting: EdgeRouting;
   snapToGrid: boolean;
   gridSize: number;
+  /** Whether a dragged position is written into the source right away.
+   *  Off by default: a position is a decision worth writing into the model
+   *  only when the user means it to be one, not on every drag - see
+   *  `DiagramHost.rememberLayout`, which is where a drag goes instead. */
+  autoSavePositions: boolean;
 }
 
 /** Which declaration kind stores a position - they all store it the same
@@ -46,6 +51,7 @@ export interface DiagramSource {
   /** Per file, the `Meta` blocks of its declarations: the source of every
    *  stored position and of the assigned style classes. */
   metas: Record<string, TableMeta[]>;
+  enumMetas: Record<string, EnumMeta[]>;
   projectStyles: ProjectStyles;
   /** Fallback positions for tables that carry no `x-editorPosition` yet. */
   layout: Record<string, Position>;

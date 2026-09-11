@@ -15,6 +15,8 @@ export function DiagramToolbar(): JSX.Element {
   const setEdgeRouting = usePreferences((s) => s.setEdgeRouting);
   const snapToGrid = usePreferences((s) => s.snapToGrid);
   const setSnapToGrid = usePreferences((s) => s.setSnapToGrid);
+  const autoSavePositions = usePreferences((s) => s.autoSavePositions);
+  const setAutoSavePositions = usePreferences((s) => s.setAutoSavePositions);
 
   return (
     <Panel position="top-right" className="toolbar">
@@ -41,6 +43,18 @@ export function DiagramToolbar(): JSX.Element {
           onChange={(event) => setSnapToGrid(event.currentTarget.checked)}
         />
         Snap to grid
+      </label>
+
+      <label
+        className="toolbar__switch"
+        title="When off, a dragged position stays only in this panel until turned on"
+      >
+        <input
+          type="checkbox"
+          checked={autoSavePositions}
+          onChange={(event) => setAutoSavePositions(event.currentTarget.checked)}
+        />
+        Save positions to file
       </label>
     </Panel>
   );

@@ -269,6 +269,7 @@ export function readPreferences(): DiagramPreferences {
     edgeRouting: config.get("edgeRouting", "smoothstep"),
     snapToGrid: config.get("snapToGrid", false),
     gridSize: config.get("gridSize", 16),
+    autoSavePositions: config.get("autoSavePositions", false),
   };
 }
 

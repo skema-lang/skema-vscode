@@ -11,7 +11,7 @@
  */
 import { createContext, useContext } from "react";
 
-import type { ExportedField, ExportedTable } from "../../shared/skema";
+import type { ExportedEnum, ExportedField, ExportedTable } from "../../shared/skema";
 import type { DiagramChrome, DiagramHost } from "./types";
 
 interface DiagramContextValue {
@@ -47,6 +47,7 @@ export function useDiagramChrome(): DiagramChrome {
 export function useReveal(): {
   revealTable: (table: ExportedTable) => void;
   revealField: (field: ExportedField) => void;
+  revealEnum: (en: ExportedEnum) => void;
 } {
   const host = useDiagramHost();
   return {
@@ -55,6 +56,9 @@ export function useReveal(): {
     },
     revealField: (field) => {
       if (field.location) host.revealLocation(field.location);
+    },
+    revealEnum: (en) => {
+      if (en.location) host.revealLocation(en.location);
     },
   };
 }

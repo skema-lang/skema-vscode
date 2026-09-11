@@ -4,7 +4,7 @@
  * Pure functions from the analysed model to the card's contents, kept out
  * of the components so the wording is in one place and testable on its own.
  */
-import type { ExportedField, ExportedTable, Location } from "../../shared/skema";
+import type { ExportedEnum, ExportedField, ExportedTable, Location } from "../../shared/skema";
 import { flagLabels } from "../model/flags";
 
 /** One labelled line of a hover card. Defined here, next to the code that
@@ -92,6 +92,13 @@ export function tableFacts(table: ExportedTable): DetailFact[] {
     });
   }
   return facts;
+}
+
+export function enumFacts(en: ExportedEnum): DetailFact[] {
+  return [
+    { label: "Values", value: String(en.entries.length) },
+    { label: "Stored as", value: en.storedType },
+  ];
 }
 
 /** A table's own note, which the model keeps on no field of its own - it

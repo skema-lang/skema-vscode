@@ -34,21 +34,23 @@ const host: DiagramHost = {
 export function DiagramPane(): JSX.Element {
   const analysis = useProject((s) => s.analysis);
   const metas = useProject((s) => s.metas);
+  const enumMetas = useProject((s) => s.enumMetas);
   const projectStyles = useProject((s) => s.projectStyles);
   const layout = useProject((s) => s.layout);
 
   const edgeRouting = usePreferences((s) => s.edgeRouting);
   const snapToGrid = usePreferences((s) => s.snapToGrid);
   const gridSize = usePreferences((s) => s.gridSize);
+  const autoSavePositions = usePreferences((s) => s.autoSavePositions);
 
   const source = useMemo<DiagramSource | null>(
-    () => (analysis ? { model: analysis.model, metas, projectStyles, layout } : null),
-    [analysis, metas, projectStyles, layout],
+    () => (analysis ? { model: analysis.model, metas, enumMetas, projectStyles, layout } : null),
+    [analysis, metas, enumMetas, projectStyles, layout],
   );
 
   const preferences = useMemo(
-    () => ({ edgeRouting, snapToGrid, gridSize }),
-    [edgeRouting, snapToGrid, gridSize],
+    () => ({ edgeRouting, snapToGrid, gridSize, autoSavePositions }),
+    [edgeRouting, snapToGrid, gridSize, autoSavePositions],
   );
 
   return <DiagramView source={source} preferences={preferences} host={host} chrome={chrome} />;

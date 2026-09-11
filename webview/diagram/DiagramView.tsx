@@ -36,7 +36,9 @@ import "@xyflow/react/dist/style.css";
 
 import type { Location } from "../../shared/skema";
 import { DiagramContextProvider } from "./context";
+import { EnumNode, enumNodeHeight } from "./EnumNode";
 import type {
+  DeclKind,
   DiagramChrome,
   DiagramHost,
   DiagramPreferences,
@@ -44,19 +46,43 @@ import type {
 } from "./types";
 import {
   edgeSides,
+  enumId,
+  enumNodeData,
   nodeData,
   relationEdges,
   sourceHandleId,
   tableId,
   targetHandleId,
+  type EnumNodeData,
   type TableNodeData,
 } from "./graph";
 import { layoutGraph } from "./layout";
 import { readPosition } from "./positions";
-import { resolveTableStyle, readStyleClasses } from "./style";
+import { resolveEnumStyle, resolveTableStyle, readStyleClasses } from "./style";
 import { NODE_WIDTH, TableNode, nodeHeight } from "./TableNode";
 
-const nodeTypes = { table: TableNode };
+const nodeTypes = { table: TableNode, enum: EnumNode };
+
+/** One entry of the model's own view of the diagram - which kind of node it
+ *  is decides both its React Flow `type` and how tall it lays out. */
+type NodeEntry =
+  | { kind: "table"; data: TableNodeData }
+  | { kind: "enum"; data: EnumNodeData };
+
+function entryHeight(entry: NodeEntry): number {
+  return entry.kind === "table" ? nodeHeight(entry.data) : enumNodeHeight(entry.data);
+}
+
+/** What a drag needs to write back: which file, which declaration, which
+ *  kind of `Meta` block it stores its position in. */
+function declRefOf(node: Node): { file: string; name: string; kind: DeclKind } {
+  if (node.type === "enum") {
+    const data = node.data as unknown as EnumNodeData;
+    return { file: data.enum.file, name: data.enum.name, kind: "enum" };
+  }
+  const data = node.data as unknown as TableNodeData;
+  return { file: data.table.file, name: data.table.name, kind: "table" };
+}
 
 export interface DiagramViewProps {
   /** `null` while the host has no analysis yet - the canvas says so. */
@@ -68,7 +94,7 @@ export interface DiagramViewProps {
 
 function DiagramCanvas({ source, preferences, host, chrome }: DiagramViewProps): JSX.Element {
   const { rememberLayout, applyPositionEdit, revealLocation } = host;
-  const { edgeRouting, snapToGrid, gridSize } = preferences;
+  const { edgeRouting, snapToGrid, gridSize, autoSavePositions } = preferences;
   const Toolbar = chrome.Toolbar;
 
   const [nodes, setNodes] = useState<Node[]>([]);
@@ -83,28 +109,38 @@ function DiagramCanvas({ source, preferences, host, chrome }: DiagramViewProps):
    *  the stored positions actually change. */
   const model = useMemo(() => {
     if (!source) return null;
-    const { model: exported, metas, projectStyles, layout } = source;
+    const { model: exported, metas, enumMetas, projectStyles, layout } = source;
 
     const relations = relationEdges(exported);
-    const data = new Map<string, TableNodeData>(
-      exported.tables.map((table) => {
-        const meta = metas[table.file]?.find((m) => m.name === table.name);
-        const style = resolveTableStyle(
-          projectStyles,
-          table.file,
-          readStyleClasses(meta?.entries),
-        );
-        return [tableId(table.namespace, table.name), nodeData(table, style)];
-      }),
-    );
+    const data = new Map<string, NodeEntry>();
+    for (const table of exported.tables) {
+      const meta = metas[table.file]?.find((m) => m.name === table.name);
+      const style = resolveTableStyle(projectStyles, table.file, readStyleClasses(meta?.entries));
+      data.set(tableId(table.namespace, table.name), {
+        kind: "table",
+        data: nodeData(table, style),
+      });
+    }
+    for (const en of exported.enums) {
+      const meta = enumMetas[en.file]?.find((m) => m.name === en.name);
+      const style = resolveEnumStyle(projectStyles, en.file, readStyleClasses(meta?.entries));
+      data.set(enumId(en.namespace, en.name), { kind: "enum", data: enumNodeData(en, style) });
+    }
 
-    // Source position wins; then one from an earlier pass; only a table
-    // seen for the first time is laid out - see layout.ts.
+    // Source position wins; then one from an earlier pass; only a table or
+    // enum seen for the first time is laid out - see layout.ts.
     const placed = new Map<string, { x: number; y: number }>();
     const unplaced: string[] = [];
     for (const table of exported.tables) {
       const id = tableId(table.namespace, table.name);
       const stored = readPosition(metas[table.file]?.find((m) => m.name === table.name));
+      const known = stored ?? layout[id];
+      if (known) placed.set(id, known);
+      else unplaced.push(id);
+    }
+    for (const en of exported.enums) {
+      const id = enumId(en.namespace, en.name);
+      const stored = readPosition(enumMetas[en.file]?.find((m) => m.name === en.name));
       const known = stored ?? layout[id];
       if (known) placed.set(id, known);
       else unplaced.push(id);
@@ -118,7 +154,7 @@ function DiagramCanvas({ source, preferences, host, chrome }: DiagramViewProps):
           const entry = data.get(id);
           return {
             width: NODE_WIDTH,
-            height: entry ? nodeHeight(entry) : 120,
+            height: entry ? entryHeight(entry) : 120,
           };
         },
       });
@@ -145,7 +181,7 @@ function DiagramCanvas({ source, preferences, host, chrome }: DiagramViewProps):
     }
     setNodes((current) => {
       const existing = new Map(current.map((node) => [node.id, node]));
-      const next = [...model.data.entries()].map(([id, data]) => {
+      const next = [...model.data.entries()].map(([id, entry]) => {
         const previous = existing.get(id);
         const position =
           previous && dragging.current.has(id)
@@ -154,9 +190,9 @@ function DiagramCanvas({ source, preferences, host, chrome }: DiagramViewProps):
         return {
           ...(previous ?? {}),
           id,
-          type: "table",
+          type: entry.kind,
           position,
-          data: data as unknown as Record<string, unknown>,
+          data: entry.data as unknown as Record<string, unknown>,
         };
       });
       live.current = next;
@@ -250,17 +286,25 @@ function DiagramCanvas({ source, preferences, host, chrome }: DiagramViewProps):
     });
   }, []);
 
-  /** One write per table that actually moved, whether one was dragged or a
-   *  whole selection was. */
+  /**
+   * One write per table or enum that actually moved, whether one was dragged
+   * or a whole selection was. Only reaches the source when `autoSavePositions`
+   * is on; otherwise the position is remembered for this session only, the
+   * same fallback an unplaced node gets on its first layout.
+   */
   const persistPositions = useCallback(
     (moved: Node[]) => {
       for (const node of moved) {
         dragging.current.delete(node.id);
-        const data = node.data as unknown as TableNodeData;
-        applyPositionEdit(data.table.file, data.table.name, node.position, "table");
+        if (autoSavePositions) {
+          const { file, name, kind } = declRefOf(node);
+          applyPositionEdit(file, name, node.position, kind);
+        } else {
+          rememberLayout({ [node.id]: node.position });
+        }
       }
     },
-    [applyPositionEdit],
+    [applyPositionEdit, rememberLayout, autoSavePositions],
   );
 
   const onNodeDragStop = useCallback(
@@ -293,7 +337,7 @@ function DiagramCanvas({ source, preferences, host, chrome }: DiagramViewProps):
   if (nodes.length === 0) {
     return (
       <div className="diagram-empty">
-        No tables yet. Declare one:
+        Nothing to show yet. Declare a table:
         <pre>{"Table Customer {\n  id int [pk];\n}"}</pre>
       </div>
     );

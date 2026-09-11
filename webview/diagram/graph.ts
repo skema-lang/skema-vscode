@@ -99,6 +99,11 @@ export function tableId(namespace: string, name: string): string {
   return namespace ? `${namespace}.${name}` : name;
 }
 
+/** Same rule as `tableId`, for the other declaration kind that gets a node. */
+export function enumId(namespace: string, name: string): string {
+  return namespace ? `${namespace}.${name}` : name;
+}
+
 export function isBackReference(field: ExportedField): boolean {
   return field.relation?.kind === "ManyToOne";
 }
@@ -110,6 +115,10 @@ export function nodeData(table: ExportedTable, style: ResolvedStyle): TableNodeD
     backReferences: table.fields.filter(isBackReference),
     style,
   };
+}
+
+export function enumNodeData(en: ExportedEnum, style: ResolvedStyle): EnumNodeData {
+  return { enum: en, entries: en.entries, style };
 }
 
 export function relationEdges(model: ExportedModel): RelationEdge[] {

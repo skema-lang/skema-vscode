@@ -108,6 +108,11 @@
           "default": 16,
           "minimum": 4,
           "description": "Grid spacing used when snapping is on."
+        },
+        "skema.diagram.autoSavePositions": {
+          "type": "boolean",
+          "default": false,
+          "description": "Write a dragged table or enum position into the .skema source immediately. When off, dragging still repositions it in the diagram, but the position stays in this panel only until turned on."
         }
       }
     }
