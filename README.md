@@ -61,19 +61,22 @@ see *Where the server comes from*.
   explanation, and `[onDelete=` / `[onUpdate=` now suggest their fixed set of
   values (`cascade`, `restrict`, `setNull`, `setDefault`, `noAction`).
 
-- **Dragging that writes to the model.** Drag a table and its position is
-  stored in that table's own `Meta` block:
+- **Dragging that writes a file beside the model.** Drag a table, or bend a
+  relationship line, and it lands in `.skema/layout.json` next to the root
+  document:
 
-  ```skema
-  Table Customer {
-    Meta { "x-editorPosition" = "120,340"; }
+  ```json
+  {
+    "format": 1,
+    "nodes": { "Customer": { "x": 120, "y": 340 } },
+    "edges": { "Order.customer->Customer.id": { "points": [{ "x": 420, "y": 140 }] } }
   }
   ```
 
-  `x-` keys are the language's own mechanism for tool metadata (`docs/01`,
-  1.11), so a layout travels with the file and shows up in a diff. The edit
-  is applied as a `WorkspaceEdit`, which means **Ctrl-Z undoes a drag** like
-  it undoes a keystroke, and it works whether or not the file is open.
+  Sorted and rounded to whole pixels, so it diffs and merges like any other
+  file — while the `.skema` sources stay pure model. The write is applied as
+  a `WorkspaceEdit`, which means **Ctrl-Z undoes a drag** like it undoes a
+  keystroke.
 
 - **The root file is found, not assumed.** Open any `.skema` file and the
   server analyzes it as part of the project whose `Project` block reaches it
@@ -152,10 +155,9 @@ src/                 the extension host
   docs/provider.ts   the Markdown preview and export - no webview needed
 shared/
   protocol.ts        both boundaries: the skema/ LSP messages, and the webview's
-  skema.d.ts         generated - the model types (npm run sync:types)
   markdown.ts        the model as Markdown - ported from skema-editor's docs pane
 webview/             the diagram, running in the panel
-  diagram/           graph derivation, layout, styles, nodes - see below
+  diagram/           this host's wiring: the pane, the hover card, the toolbar
   host.ts            the only way out of the sandbox
   store.ts           the model as last pushed in
 test/                the fixture test
@@ -189,16 +191,13 @@ Two conventions worth knowing before changing the diagram:
 
 ## The model types are generated
 
-`shared/skema.d.ts` is the type declarations `skema-wasm` generates,
-vendored — types only, no runtime. The server's `skema/model` response
-carries `skema-api`'s own structures, serialized by the same serde derives
-that produce the browser's JSON, so those declarations describe the LSP
-responses exactly. Re-run after changing the model:
-
-```bash
-npm run sync:types
-SKEMA_DIR=/path/to/skema-lang npm run sync:types
-```
+The diagram itself is not in this repository: it is `@skema/diagram` from
+[skema-lib](https://gitlab.com/skema-language/skema-lib), shared with the
+browser editor, and what stays here is only the wiring this host needs.
+Model types come from `@skema/model`, generated in the language repo — the
+server's `skema/model` response carries `skema-api`'s own structures,
+serialized by the same serde derives that produce the browser's JSON, so
+those declarations describe the LSP responses exactly.
 
 `npm test` is what makes that a claim rather than a hope: it replays a real
 `skema/model` response, captured from the real server against the language

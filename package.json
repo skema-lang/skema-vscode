@@ -108,11 +108,6 @@
           "default": 16,
           "minimum": 4,
           "description": "Grid spacing used when snapping is on."
-        },
-        "skema.diagram.autoSavePositions": {
-          "type": "boolean",
-          "default": false,
-          "description": "Write a dragged table or enum position into the .skema source immediately. When off, dragging still repositions it in the diagram, but the position stays in this panel only until turned on."
         }
       }
     },
@@ -127,12 +122,13 @@
     "watch": "node esbuild.mjs --watch",
     "typecheck": "tsc --noEmit",
     "package": "vsce package --no-dependencies",
-    "sync:types": "node scripts/sync-types.mjs",
     "fetch:server": "node scripts/fetch-server.mjs",
     "test": "node esbuild.mjs --tests && node --test dist/test/*.test.mjs"
   },
   "dependencies": {
     "@dagrejs/dagre": "^3.1.1",
+    "@skema/diagram": "file:../skema-lib/diagram",
+    "@skema/model": "file:../skema/npm/model",
     "@xyflow/react": "^12.11.6",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",

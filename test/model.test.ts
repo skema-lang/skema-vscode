@@ -21,10 +21,15 @@ import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 
 import type { ModelResponse } from "../shared/protocol";
-import type { MetaEntry } from "../shared/skema";
-import { nodeData, relationEdges, tableId } from "../webview/diagram/graph";
-import { readPosition } from "../webview/diagram/positions";
-import { collectProjectStyles, readStyleClasses, resolveTableStyle } from "../webview/diagram/style";
+import type { MetaEntry } from "@skema/model";
+import {
+  collectProjectStyles,
+  nodeData,
+  readStyleClasses,
+  relationEdges,
+  resolveTableStyle,
+  tableId,
+} from "@skema/diagram";
 import { useProject } from "../webview/store";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -169,18 +174,6 @@ test("an unrecognized property or value is still dropped without a word", () => 
   assert.equal(resolved["borderColor"], undefined, "alpha colours stay out");
   assert.equal(resolved["boxShadow"], undefined, "an unknown property is not a property");
   assert.equal(resolved["borderStyle"], "dashed", "the recognized one still lands");
-});
-
-test("a table with no stored position has none, and one written in is read back", () => {
-  const metas = fixture.metas.find((m) => m.path === "/workspace/lending.skema");
-  const loan = metas?.tables.find((t) => t.name === "Loan");
-  assert.ok(loan);
-  assert.equal(readPosition(loan), undefined, "the reference model stores no layout");
-
-  assert.deepEqual(
-    readPosition({ entries: [entry("x-editorPosition", "120,-4")] }),
-    { x: 120, y: -4 },
-  );
 });
 
 test("the diagnostics list is the shape the status bar renders", () => {

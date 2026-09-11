@@ -20,7 +20,7 @@ import type {
   ExportedModel,
   ExportedTable,
   MetaEntry,
-} from "./skema";
+} from "@skema/model";
 import type { FileMetas } from "./protocol";
 
 interface Notes {

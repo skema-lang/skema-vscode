@@ -7,18 +7,18 @@
  * dragged table land in VSCode's undo history like any other edit rather
  * than as a write behind the editor's back.
  *
- * The diagram calls the same three functions the browser editor's diagram
- * calls (`revealLocation`, `revealTable`, `revealField`,
- * `applyPositionEdit`), with the same signatures, so the view itself does
- * not know which host it is running in.
+ * The diagram calls the same functions the browser editor's diagram calls
+ * (`revealLocation`, `revealTable`, `revealField`, `saveLayout`), with the
+ * same signatures, so the view itself does not know which host it is
+ * running in.
  */
 import type {
-  DeclKind,
+  DiagramLayout,
   DiagramPreferences,
   HostMessage,
   WebviewMessage,
 } from "../shared/protocol";
-import type { ExportedField, ExportedTable, Location } from "../shared/skema";
+import type { ExportedField, ExportedTable, Location } from "@skema/model";
 
 interface VsCodeApi {
   postMessage(message: WebviewMessage): void;
@@ -47,22 +47,10 @@ export function revealField(field: ExportedField): void {
   if (field.location) revealLocation(field.location);
 }
 
-/**
- * Records a dragged position.
- *
- * Deliberately fire-and-forget, and deliberately *not* accompanied by a
- * local model update: the extension asks the server for the edit, applies
- * it, and the resulting document change comes back as a fresh model. The
- * diagram therefore never holds a position the file does not have - the one
- * failure mode a write-then-assume design has.
- */
-export function applyPositionEdit(
-  file: string,
-  name: string,
-  position: { x: number; y: number },
-  kind: DeclKind = "table",
-): void {
-  post({ type: "position", file, kind, name, x: position.x, y: position.y });
+/** Records the arrangement after a gesture. Fire-and-forget: the extension
+ *  writes the file and sends the result back as a `layout` message. */
+export function saveLayout(layout: DiagramLayout): void {
+  post({ type: "layout", layout });
 }
 
 export function setPreference<K extends keyof DiagramPreferences>(

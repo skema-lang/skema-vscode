@@ -21,7 +21,7 @@
 import { useCallback, useEffect, useRef, useState, type JSX } from "react";
 import { createPortal } from "react-dom";
 
-import type { DetailCardProps } from "./types";
+import type { DetailCardProps } from "@skema/diagram";
 
 const OPEN_DELAY_MS = 350;
 const CLOSE_DELAY_MS = 80;

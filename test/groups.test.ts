@@ -23,15 +23,15 @@ import {
   groupMemberId,
   groupMembership,
   tableId,
-} from "../webview/diagram/graph";
+} from "@skema/diagram";
 import {
   groupFrame,
   toAnchor,
   toChildPosition,
   toStoredPosition,
   type MemberBox,
-} from "../webview/diagram/groupFrame";
-import { layoutGraph } from "../webview/diagram/layout";
+} from "@skema/diagram";
+import { layoutGraph } from "@skema/diagram";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fixture = JSON.parse(

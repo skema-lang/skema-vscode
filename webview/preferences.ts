@@ -9,17 +9,16 @@
  * the new value straight back here - so what the toolbar shows is always what
  * the settings say, including when they are edited in the settings UI.
  *
- * Line routing is a view option on purpose, unlike a table's position. A
- * position is a decision worth writing into the model the moment it moves;
- * how a line is drawn is adjusted while hunting for a readable layout, and
- * writing that to the source on every change would churn the file for
- * nothing.
+ * The split is between a setting and a decision. Which routing style lines
+ * use, or whether dragging snaps, is a habit of whoever is looking. Where a
+ * box sits and where a line bends is a decision about this diagram, and
+ * lives in the layout file beside the model instead.
  */
 import { create } from "zustand";
 
 // Which routings exist is the diagram's business - this store only records
 // which one the settings picked.
-import { EDGE_ROUTINGS, type DiagramPreferences, type EdgeRouting } from "./diagram/types";
+import { EDGE_ROUTINGS, type DiagramPreferences, type EdgeRouting } from "@skema/diagram";
 import { setPreference } from "./host";
 
 export { EDGE_ROUTINGS };
@@ -30,14 +29,12 @@ export interface PreferencesState extends DiagramPreferences {
   apply: (preferences: DiagramPreferences) => void;
   setEdgeRouting: (routing: EdgeRouting) => void;
   setSnapToGrid: (snap: boolean) => void;
-  setAutoSavePositions: (autoSave: boolean) => void;
 }
 
 export const usePreferences = create<PreferencesState>((set) => ({
   edgeRouting: "smoothstep",
   snapToGrid: false,
   gridSize: 16,
-  autoSavePositions: false,
 
   apply: (preferences) => set(preferences),
 
@@ -50,9 +47,5 @@ export const usePreferences = create<PreferencesState>((set) => ({
   setSnapToGrid: (snapToGrid) => {
     set({ snapToGrid });
     setPreference("snapToGrid", snapToGrid);
-  },
-  setAutoSavePositions: (autoSavePositions) => {
-    set({ autoSavePositions });
-    setPreference("autoSavePositions", autoSavePositions);
   },
 }));

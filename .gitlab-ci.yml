@@ -4,7 +4,7 @@
 ##
 ## On merge requests and the default branch: typecheck, test and bundle. No
 ## Rust, no server binary — everything here is TypeScript, and the model
-## types are committed (`shared/skema.d.ts`, see `npm run sync:types`).
+## model types come from the `@skema/model` package, generated in the language repo.
 ##
 ## On a tag: one **platform-specific VSIX per platform**, each with that
 ## platform's `skema-lsp` pulled from the language project's package

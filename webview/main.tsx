@@ -8,7 +8,7 @@
 import { StrictMode, useEffect, useState, type JSX } from "react";
 import { createRoot } from "react-dom/client";
 
-import type { Diagnostic } from "../shared/skema";
+import type { Diagnostic } from "@skema/model";
 import { DiagramPane } from "./diagram/DiagramPane";
 import { announceReady, onHostMessage, revealLocation } from "./host";
 import { usePreferences } from "./preferences";
@@ -68,6 +68,7 @@ function StatusBar({ status }: { status: string | null }): JSX.Element {
 
 function App(): JSX.Element {
   const applyModel = useProject((s) => s.applyModel);
+  const applyLayout = useProject((s) => s.applyLayout);
   const applyPreferences = usePreferences((s) => s.apply);
   const [status, setStatus] = useState<string | null>(null);
   const [seen, setSeen] = useState(false);
@@ -79,6 +80,9 @@ function App(): JSX.Element {
           applyModel(message.model);
           setSeen(true);
           setStatus(null);
+          break;
+        case "layout":
+          applyLayout(message.layout);
           break;
         case "preferences":
           applyPreferences(message.preferences);
@@ -92,7 +96,7 @@ function App(): JSX.Element {
     // first model straight past it.
     announceReady();
     return stop;
-  }, [applyModel, applyPreferences]);
+  }, [applyModel, applyLayout, applyPreferences]);
 
   return (
     <div className="shell">

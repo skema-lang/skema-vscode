@@ -10,24 +10,34 @@
  */
 import { useMemo, type JSX } from "react";
 
-import { applyPositionEdit, revealLocation } from "../host";
+import { revealLocation, saveLayout } from "../host";
 import { usePreferences } from "../preferences";
 import { useProject } from "../store";
 import { DetailCard } from "./DetailCard";
 import { DiagramToolbar } from "./DiagramToolbar";
-import { DiagramView } from "./DiagramView";
-import type { DiagramChrome, DiagramHost, DiagramSource } from "./types";
+import {
+  DiagramView,
+  type DiagramChrome,
+  type DiagramHost,
+  type DiagramSource,
+} from "@skema/diagram";
 
 const chrome: DiagramChrome = { DetailCard, Toolbar: DiagramToolbar };
 
-/** Fire-and-forget, and deliberately without a local model update: the
- *  extension asks the server for the edit, applies it, and the resulting
- *  document change comes back as a fresh model. The diagram therefore never
- *  holds a position the file does not have. */
+/**
+ * The arrangement is applied here *and* sent out, unlike a document edit.
+ *
+ * A webview cannot write a file, so the round trip through the extension
+ * takes a frame - and a drag that waited for it would snap back to where the
+ * box started before landing where it was dropped. The cost is that a write
+ * the extension could not carry out leaves the panel a step ahead of the
+ * file until the next refresh reads it back.
+ */
 const host: DiagramHost = {
-  rememberLayout: (positions) => useProject.getState().rememberLayout(positions),
-  applyPositionEdit: (file, name, position, kind) =>
-    applyPositionEdit(file, name, position, kind),
+  saveLayout: (layout) => {
+    useProject.getState().applyLayout(layout);
+    saveLayout(layout);
+  },
   revealLocation,
 };
 
@@ -42,7 +52,6 @@ export function DiagramPane(): JSX.Element {
   const edgeRouting = usePreferences((s) => s.edgeRouting);
   const snapToGrid = usePreferences((s) => s.snapToGrid);
   const gridSize = usePreferences((s) => s.gridSize);
-  const autoSavePositions = usePreferences((s) => s.autoSavePositions);
 
   const source = useMemo<DiagramSource | null>(
     () =>
@@ -53,8 +62,8 @@ export function DiagramPane(): JSX.Element {
   );
 
   const preferences = useMemo(
-    () => ({ edgeRouting, snapToGrid, gridSize, autoSavePositions }),
-    [edgeRouting, snapToGrid, gridSize, autoSavePositions],
+    () => ({ edgeRouting, snapToGrid, gridSize }),
+    [edgeRouting, snapToGrid, gridSize],
   );
 
   return <DiagramView source={source} preferences={preferences} host={host} chrome={chrome} />;

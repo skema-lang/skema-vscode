@@ -1,8 +1,8 @@
 /**
  * What crosses the two boundaries this extension has.
  *
- * 1. **Extension ↔ language server**, over LSP. Three requests LSP has no
- *    word for, all namespaced `skema/` and all defined in
+ * 1. **Extension ↔ language server**, over LSP. Two requests LSP has no
+ *    word for, both namespaced `skema/` and both defined in
  *    `skema-lang/crates/skema-lsp/src/protocol.rs`. Their payloads are
  *    `skema-api`'s own structures, which is why the types below are built
  *    from the generated `skema.d.ts` rather than described a second time.
@@ -14,21 +14,19 @@
  * *what* was dragged, and the extension turns that into a `WorkspaceEdit`,
  * which is what puts a drag into VSCode's own undo history.
  */
-import type { Diagnostic, EnumMeta, ExportedModel, GroupMeta, Location, TableMeta } from "./skema";
+import type { Diagnostic, EnumMeta, ExportedModel, GroupMeta, Location, TableMeta } from "@skema/model";
 // The payload types the diagram already defines are reused rather than
 // restated: `skema/model` exists to feed the diagram, so a second
 // description of the same shape could only ever drift from it. Both modules
 // are free of React, so importing them here does not pull a UI framework
 // into the extension host.
-import type { FileStyles } from "../webview/diagram/style";
-import type { DeclKind, DiagramPreferences } from "../webview/diagram/types";
+import type { DiagramLayout, DiagramPreferences, FileStyles } from "@skema/diagram";
 
-export type { DeclKind, DiagramPreferences, FileStyles };
+export type { DiagramLayout, DiagramPreferences, FileStyles };
 
 // ---------------------------------------------------------------- LSP side
 
 export const MODEL_REQUEST = "skema/model";
-export const POSITION_EDIT_REQUEST = "skema/positionEdit";
 export const MODEL_CHANGED_NOTIFICATION = "skema/modelChanged";
 
 export interface ProjectFileRef {
@@ -57,35 +55,12 @@ export interface ModelResponse {
   styles: FileStyles[];
 }
 
-export interface PositionEditParams {
-  uri: string;
-  kind: DeclKind;
-  name: string;
-  x: number;
-  y: number;
-}
-
-export interface PositionEditResponse {
-  /** `null` when the file declares no such thing - a stale diagram after a
-   *  rename, not an error. */
-  edit: { range: LspRange; newText: string } | null;
-}
-
-export interface LspPosition {
-  line: number;
-  character: number;
-}
-
-export interface LspRange {
-  start: LspPosition;
-  end: LspPosition;
-}
-
 // ------------------------------------------------------------ webview side
 
 /** Extension → webview. */
 export type HostMessage =
   | { type: "model"; model: ModelResponse }
+  | { type: "layout"; layout: DiagramLayout }
   | { type: "preferences"; preferences: DiagramPreferences }
   | { type: "status"; message: string };
 
@@ -102,11 +77,8 @@ export type WebviewMessage =
     }
   | { type: "reveal"; location: Location }
   | {
-      type: "position";
-      /** The file declaring `name` - not necessarily the open one. */
-      file: string;
-      kind: DeclKind;
-      name: string;
-      x: number;
-      y: number;
+      /** The arrangement after a gesture, whole. It lands in a file beside
+       *  the model rather than in any `.skema` source. */
+      type: "layout";
+      layout: DiagramLayout;
     };

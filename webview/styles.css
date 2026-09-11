@@ -121,6 +121,43 @@ body,
   cursor: pointer;
 }
 
+/* Corner handles on a right-angle line (`WaypointEdge`). They stay out of the
+   way until the line is hovered or selected, or one of them is being held. */
+.edge-corner,
+.edge-corner-add {
+  cursor: grab;
+  pointer-events: all;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.react-flow__edge:hover .edge-corner,
+.react-flow__edge:hover .edge-corner-add,
+.edge-corner.is-active {
+  opacity: 1;
+}
+
+.edge-corner {
+  fill: var(--sk-accent);
+  stroke: var(--sk-surface);
+  stroke-width: 1.5;
+}
+
+/* Hollow, because it marks a corner that does not exist yet. */
+.edge-corner-add {
+  fill: var(--sk-surface);
+  stroke: var(--sk-accent);
+  stroke-width: 1.5;
+}
+
+.react-flow__edge:hover .edge-corner-add {
+  opacity: 0.65;
+}
+
+.react-flow__edge .edge-corner-add:hover {
+  opacity: 1;
+}
+
 .react-flow__controls-button {
   background: var(--sk-surface-raised);
   border-bottom: 1px solid var(--sk-border);

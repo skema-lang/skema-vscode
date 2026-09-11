@@ -15,17 +15,14 @@
 import { create } from "zustand";
 
 import type { ModelResponse } from "../shared/protocol";
-import type { EnumMeta, ExportedModel, GroupMeta, TableMeta } from "../shared/skema";
+import type { EnumMeta, ExportedModel, GroupMeta, TableMeta } from "@skema/model";
 import {
   collectProjectStyles,
+  emptyLayout,
   emptyProjectStyles,
+  type DiagramLayout,
   type ProjectStyles,
-} from "./diagram/style";
-
-export interface Position {
-  x: number;
-  y: number;
-}
+} from "@skema/diagram";
 
 export interface ProjectState {
   /** `null` until the first model arrives - the diagram shows "analyzing". */
@@ -36,17 +33,17 @@ export interface ProjectState {
   enumMetas: Record<string, EnumMeta[]>;
   groupMetas: Record<string, GroupMeta[]>;
   projectStyles: ProjectStyles;
-  /** Fallback positions for tables that carry no `x-editorPosition` yet.
-   *  Kept in memory only: once a table is dragged, its position lives in the
-   *  source text instead. */
-  layout: Record<string, Position>;
+  /** How the diagram is arranged, as the extension last read it out of
+   *  `.skema/layout.json`. */
+  layout: DiagramLayout;
   /** Which file declares which path - so a drag can name the file to edit. */
   uriOf: Record<string, string>;
   rootUri: string | null;
   isOwnRoot: boolean;
   diagnostics: ModelResponse["diagnostics"];
 
-  rememberLayout: (positions: Record<string, Position>) => void;
+  /** Applies what the extension read from, or wrote to, the layout file. */
+  applyLayout: (layout: DiagramLayout) => void;
   applyModel: (response: ModelResponse) => void;
 }
 
@@ -56,21 +53,20 @@ export const useProject = create<ProjectState>((set, get) => ({
   enumMetas: {},
   groupMetas: {},
   projectStyles: emptyProjectStyles(),
-  layout: {},
+  layout: emptyLayout(),
   uriOf: {},
   rootUri: null,
   isOwnRoot: false,
   diagnostics: [],
 
-  rememberLayout: (positions) => set({ layout: { ...get().layout, ...positions } }),
+  applyLayout: (layout) => set({ layout }),
 
   applyModel: (response) => {
     const byPath = <T,>(pick: (entry: ModelResponse["metas"][number]) => T): Record<string, T> =>
       Object.fromEntries(response.metas.map((entry) => [entry.path, pick(entry)]));
 
-    // A different project means the remembered fallback positions describe
-    // other tables; keeping them would drop same-named tables of the new
-    // model onto the old one's coordinates.
+    // A different project's arrangement describes other tables; the
+    // extension sends the new one right after this.
     const switchedProject = get().rootUri !== null && get().rootUri !== response.rootUri;
 
     set({
@@ -83,7 +79,7 @@ export const useProject = create<ProjectState>((set, get) => ({
       rootUri: response.rootUri,
       isOwnRoot: response.isOwnRoot,
       diagnostics: response.diagnostics,
-      ...(switchedProject ? { layout: {} } : {}),
+      ...(switchedProject ? { layout: emptyLayout() } : {}),
     });
   },
 }));

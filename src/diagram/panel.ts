@@ -11,13 +11,14 @@
 import * as vscode from "vscode";
 import type { LanguageClient } from "vscode-languageclient/node";
 
+import { LAYOUT_FILE, emptyLayout, parseLayout, serializeLayout } from "@skema/diagram";
+
 import {
   MODEL_REQUEST,
-  POSITION_EDIT_REQUEST,
   type DiagramPreferences,
   type HostMessage,
+  type DiagramLayout,
   type ModelResponse,
-  type PositionEditResponse,
   type WebviewMessage,
 } from "../../shared/protocol";
 
@@ -126,6 +127,7 @@ export class DiagramPanel {
       }
       this.latest = model;
       this.post({ type: "model", model });
+      void this.readLayout();
     } catch (error) {
       this.post({ type: "status", message: `Could not read the model: ${String(error)}` });
     }
@@ -137,12 +139,13 @@ export class DiagramPanel {
         this.ready = true;
         DiagramPanel.sendPreferences(readPreferences());
         void this.refresh();
+        void this.readLayout();
         break;
       case "reveal":
         void this.reveal(message);
         break;
-      case "position":
-        void this.writePosition(message);
+      case "layout":
+        void this.writeLayout(message.layout);
         break;
       case "setPreference":
         void vscode.workspace
@@ -177,43 +180,51 @@ export class DiagramPanel {
     editor.revealRange(range, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
   }
 
-  /**
-   * Writes a dragged position into the model's source.
-   *
-   * The edit itself is computed by the server, against the file's current
-   * text: the offsets belong to one exact revision, and the webview has
-   * neither the text nor any business knowing where a `Meta` entry goes.
-   * Applying it as a `WorkspaceEdit` is what puts a drag into the same undo
-   * history as a keystroke - and works whether or not the file is open.
-   */
-  private async writePosition(
-    message: Extract<WebviewMessage, { type: "position" }>,
-  ): Promise<void> {
-    const uri = this.uriOf(message.file);
+  /** Where this project keeps its arrangement: beside the root document,
+   *  the same rule the browser editor follows. */
+  private layoutUri(): vscode.Uri | undefined {
+    const root = this.latest?.rootUri;
+    if (!root) return undefined;
+    return vscode.Uri.joinPath(vscode.Uri.parse(root), "..", LAYOUT_FILE);
+  }
+
+  /** A missing or unreadable file simply means no arrangement yet. */
+  private async readLayout(): Promise<void> {
+    const uri = this.layoutUri();
     if (!uri) return;
+    try {
+      const bytes = await vscode.workspace.fs.readFile(uri);
+      this.post({ type: "layout", layout: parseLayout(new TextDecoder().decode(bytes)) });
+    } catch {
+      this.post({ type: "layout", layout: emptyLayout() });
+    }
+  }
 
-    const response = await this.client.sendRequest<PositionEditResponse>(
-      POSITION_EDIT_REQUEST,
-      {
-        uri: uri.toString(),
-        kind: message.kind,
-        name: message.name,
-        x: message.x,
-        y: message.y,
-      },
-    );
-    if (!response?.edit) return;
+  /**
+   * Writes the arrangement to that file, as a `WorkspaceEdit`.
+   *
+   * A plain `fs.writeFile` would be shorter and would put a drag outside
+   * VSCode's undo history, which is the one thing this extension has been
+   * careful about everywhere else.
+   */
+  private async writeLayout(layout: DiagramLayout): Promise<void> {
+    const uri = this.layoutUri();
+    if (!uri) return;
+    const text = serializeLayout(layout);
 
-    const { range, newText } = response.edit;
     const edit = new vscode.WorkspaceEdit();
-    edit.replace(
-      uri,
-      new vscode.Range(
-        new vscode.Position(range.start.line, range.start.character),
-        new vscode.Position(range.end.line, range.end.character),
-      ),
-      newText,
-    );
+    try {
+      // Replacing the text of an existing document is what undo understands;
+      // re-creating the file would undo as a deletion.
+      const document = await vscode.workspace.openTextDocument(uri);
+      const whole = new vscode.Range(
+        new vscode.Position(0, 0),
+        document.lineAt(document.lineCount - 1).range.end,
+      );
+      edit.replace(uri, whole, text);
+    } catch {
+      edit.createFile(uri, { contents: new TextEncoder().encode(text), overwrite: true });
+    }
     await vscode.workspace.applyEdit(edit);
   }
 
@@ -269,7 +280,6 @@ export function readPreferences(): DiagramPreferences {
     edgeRouting: config.get("edgeRouting", "smoothstep"),
     snapToGrid: config.get("snapToGrid", false),
     gridSize: config.get("gridSize", 16),
-    autoSavePositions: config.get("autoSavePositions", false),
   };
 }
 
