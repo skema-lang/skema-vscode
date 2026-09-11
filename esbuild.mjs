@@ -55,7 +55,7 @@ const webview = {
 const tests = {
   ...common,
   minify: false,
-  entryPoints: ["test/model.test.ts", "test/server.test.ts"],
+  entryPoints: ["test/model.test.ts", "test/server.test.ts", "test/markdown.test.ts"],
   outdir: "dist/test",
   outExtension: { ".js": ".mjs" },
   platform: "node",

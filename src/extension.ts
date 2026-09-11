@@ -12,6 +12,8 @@
  * The diagram is a webview fed by three custom `skema/` requests on the same
  * server (`shared/protocol.ts`).
  */
+import { dirname } from "node:path";
+
 import * as vscode from "vscode";
 import {
   LanguageClient,
@@ -22,6 +24,7 @@ import {
 
 import { MODEL_CHANGED_NOTIFICATION } from "../shared/protocol";
 import { DiagramPanel, readPreferences } from "./diagram/panel";
+import { DocumentationProvider, renderDocumentation } from "./docs/provider";
 import { ServerNotFound, resolveServer } from "./server";
 
 let client: LanguageClient | undefined;
@@ -31,6 +34,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   output = vscode.window.createOutputChannel("skema");
   context.subscriptions.push(output);
 
+  DocumentationProvider.register(context);
+
   context.subscriptions.push(
     vscode.commands.registerCommand("skema.showDiagram", () => {
       if (!client) {
@@ -39,6 +44,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       }
       DiagramPanel.show(context, client, vscode.window.activeTextEditor?.document.uri);
     }),
+    vscode.commands.registerCommand("skema.showDocumentation", () => {
+      if (!client) {
+        void vscode.window.showWarningMessage("The skema language server is not running.");
+        return;
+      }
+      void DocumentationProvider.show(vscode.window.activeTextEditor?.document.uri);
+    }),
+    vscode.commands.registerCommand("skema.exportDocumentation", () => exportDocumentation()),
     vscode.commands.registerCommand("skema.restartServer", async () => {
       await stop();
       await start(context);
@@ -104,12 +117,15 @@ async function start(context: vscode.ExtensionContext): Promise<void> {
     return;
   }
 
+  DocumentationProvider.setClient(client);
+
   context.subscriptions.push(
     // The server re-analyzes on every edit and says so; the panel answers by
     // asking for the model, but only while one is open - a notification is
     // cheap, a model is not.
     client.onNotification(MODEL_CHANGED_NOTIFICATION, () => {
       if (DiagramPanel.isOpen()) DiagramPanel.refreshCurrent();
+      DocumentationProvider.refresh();
     }),
   );
 }
@@ -117,5 +133,31 @@ async function start(context: vscode.ExtensionContext): Promise<void> {
 async function stop(): Promise<void> {
   const running = client;
   client = undefined;
+  DocumentationProvider.setClient(undefined);
   if (running) await running.stop();
+}
+
+async function exportDocumentation(): Promise<void> {
+  if (!client) {
+    void vscode.window.showWarningMessage("The skema language server is not running.");
+    return;
+  }
+  const document = vscode.window.activeTextEditor?.document;
+  if (!document || document.languageId !== "skema") {
+    void vscode.window.showWarningMessage("Open a .skema file first.");
+    return;
+  }
+
+  const markdown = await renderDocumentation(client, document.uri);
+  const base = document.uri.path.split("/").pop()?.replace(/\.skema$/, "") ?? "model";
+  const defaultUri = vscode.Uri.joinPath(vscode.Uri.file(dirname(document.uri.fsPath)), `${base}.md`);
+
+  const target = await vscode.window.showSaveDialog({
+    defaultUri,
+    filters: { Markdown: ["md"] },
+  });
+  if (!target) return;
+
+  await vscode.workspace.fs.writeFile(target, Buffer.from(markdown, "utf8"));
+  void vscode.window.showInformationMessage(`Exported skema documentation to ${target.fsPath}`);
 }

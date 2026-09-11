@@ -35,6 +35,26 @@ see *Where the server comes from*.
   anchored to the exact field they connect, hover cards for the detail the
   boxes leave out, and a routing mode you can switch.
 
+- **Markdown documentation, live and exportable.** *skema: Show
+  documentation* renders the resolved project - tables, columns, flags,
+  relationships, enums, groups, and the prose from each `Meta { note = … }` -
+  through VSCode's own built-in Markdown preview, refreshed as the model
+  changes. *skema: Export documentation as Markdown* writes the same content
+  to a `.md` file. No webview here: the output is plain Markdown, so the
+  built-in previewer already renders it, in the user's own theme, for free
+  (`src/docs/provider.ts`).
+
+- **A language reference on hover, not just a resolved fact.** Hovering a
+  field or table still shows what the model resolved; hovering a block
+  keyword itself - `Document`, `Meta`, `Project`, `Style`, `Database`, `Lint`,
+  `Partial`, `Datatype`, `Dialect`, `Field` - answers "what is this for, what
+  goes inside it, which keys does it accept" from the language's own
+  reference, since several of those blocks carry no schema meaning and so
+  never appear in the resolved model at all. The same reference text backs
+  completion: a suggested block keyword or flag carries its one-line
+  explanation, and `[onDelete=` / `[onUpdate=` now suggest their fixed set of
+  values (`cascade`, `restrict`, `setNull`, `setDefault`, `noAction`).
+
 - **Dragging that writes to the model.** Drag a table and its position is
   stored in that table's own `Meta` block:
 
@@ -123,9 +143,11 @@ src/                 the extension host
   extension.ts       the language client, commands, configuration
   server.ts          finding the skema-lsp binary
   diagram/panel.ts   the webview, and the edits it asks for
+  docs/provider.ts   the Markdown preview and export - no webview needed
 shared/
   protocol.ts        both boundaries: the skema/ LSP messages, and the webview's
   skema.d.ts         generated - the model types (npm run sync:types)
+  markdown.ts        the model as Markdown - ported from skema-editor's docs pane
 webview/             the diagram, running in the panel
   diagram/           graph derivation, layout, styles, nodes - see below
   host.ts            the only way out of the sandbox

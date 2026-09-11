@@ -41,6 +41,15 @@
         "icon": "$(type-hierarchy)"
       },
       {
+        "command": "skema.showDocumentation",
+        "title": "skema: Show documentation",
+        "icon": "$(book)"
+      },
+      {
+        "command": "skema.exportDocumentation",
+        "title": "skema: Export documentation as Markdown"
+      },
+      {
         "command": "skema.restartServer",
         "title": "skema: Restart language server"
       }
@@ -49,6 +58,11 @@
       "editor/title": [
         {
           "command": "skema.showDiagram",
+          "when": "resourceLangId == skema",
+          "group": "navigation"
+        },
+        {
+          "command": "skema.showDocumentation",
           "when": "resourceLangId == skema",
           "group": "navigation"
         }
