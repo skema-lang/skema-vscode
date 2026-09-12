@@ -5,6 +5,10 @@ modelling DSL: errors, hover, completion, go-to-definition, colouring and an
 outline from the language's own frontend, and the model as a diagram beside
 the text.
 
+> Architecture, open tasks and decisions spanning all four `skema-language`
+> repos live in the shared [brain](../brain/README.md) — read it before
+> starting non-trivial work here, and update it before you finish.
+
 ```bash
 npm install
 npm run build        # -> dist/
@@ -91,15 +95,17 @@ see *Where the server comes from*.
 Everything above is `skema-lsp`, a binary from the language repo. The
 extension looks for it in three places, in order:
 
-| | | |
+| | Where | |
 |---|---|---|
 | 1 | **`skema.serverPath`** | An absolute path you set. Wins outright, and a path that isn't executable is an error rather than a silent fallback — quietly running a different server than the one you asked for is how an afternoon disappears. This is how you run the extension against `cargo build -p skema-lsp`. |
 | 2 | **The bundled binary** | `server/skema-lsp`, fetched at packaging time from the language project's GitLab package registry (`npm run fetch:server`). The normal case for a user, who installs nothing. |
 | 3 | **`PATH`** | A `cargo install`ed one. This is what the platform-neutral VSIX relies on. |
 
 The binary is **never committed here**. It is a release artifact of the
-language repo, and `skemaServer.version` in `package.json` pins which release
-a build bundles.
+language repo, and this extension's own `version` in `package.json` decides
+which release a build bundles — the three repos move in lockstep, so there is
+no second version to keep in sync (`skemaServer.comment` in `package.json`).
+`SKEMA_SERVER_VERSION` overrides it when you need a different one on purpose.
 
 ### Building a VSIX
 
@@ -121,11 +127,11 @@ install the platform-neutral VSIX and either `cargo install --path
 crates/skema-lsp` or point `skema.serverPath` at their own build. Everything
 in the extension works that way — it is the same server.
 
-### Nothing is published yet
+### Developing against a local server
 
-The language repo has no tag, so its package registry is empty and
-`npm run fetch:server` will report a 404. Tagging `skema-lang` runs the
-release pipeline that fills it; until then, develop against a local build:
+`npm run fetch:server` pulls the release matching this extension's own
+`version`, so a version the language repo has not tagged yet answers 404. For
+day-to-day work on the extension, point it at your own build instead:
 
 ```bash
 cd ../skema-lang && cargo build -p skema-lsp
@@ -163,31 +169,33 @@ webview/             the diagram, running in the panel
 test/                the fixture test
 ```
 
-### Its relationship to `skemaeditor`
+### Its relationship to skema-editor
 
-`webview/diagram/` is the browser editor's diagram, ported. The components,
-the graph derivation, the layout and the `Style` cascade are the same code;
-what changed is where their inputs come from — a WASM analysis in the page
-there, the language server here — and three host calls (`revealLocation`,
-`revealField`/`revealTable`, `applyPositionEdit`) that go through
-`webview/host.ts` instead of straight into a store.
+The canvas itself — the components, the graph derivation, the layout and the
+`Style` cascade — is `@skema/diagram`, the one copy both front ends install
+(see *The model types are generated* below). Fix diagram behaviour there, not
+in `webview/`.
 
-That is a second copy, and it can drift. It was the deliberate choice over a
-shared npm package for now: two hosts have to exist before the seam between
-them is known, and `webview/host.ts` is where that seam already is when the
-time comes to extract one.
+What lives here is only this host's wiring: the chrome the package asks for
+(`DetailCard`, `DiagramToolbar` — they must look native in each host, Mantine
+in the browser, VSCode theme variables here), the pane that mounts it, and the
+`DiagramHost` implementation in `webview/host.ts` (`revealLocation`,
+`revealTable`, `revealField`, `saveLayout`) — the only way out of the sandbox.
+Where the model comes from is the other difference: a WASM analysis in the page
+in the browser, the language server here.
 
 Two conventions worth knowing before changing the diagram:
 
 - **A back-reference (`orders <Order.customer;`) is a real field in the
   model** with a real relation, but it creates no column and it describes a
   relationship the `>` side already describes. It is therefore filtered
-  twice, independently: out of a node's column list and out of the edge list
-  (`diagram/graph.ts`).
-- **The webview never computes an edit.** Positions are written by
-  `skema/positionEdit` on the server, against the file's current text. The
-  offsets belong to one exact revision, and the webview does not have the
-  text — VSCode's documents live in the extension host.
+  twice, independently: out of a node's column list and out of the edge list.
+  Both filters live in `@skema/diagram` (`graph.ts`), not here.
+- **The webview never writes a file.** It reports a finished gesture; the
+  extension host turns that into a `WorkspaceEdit` on `.skema/layout.json`,
+  because that is where a document and an undo stack exist
+  (`src/diagram/panel.ts`). The server is not involved — a layout is not part
+  of any `.skema` source.
 
 ## The model types are generated
 
