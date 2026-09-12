@@ -16,6 +16,7 @@ import type {
   DiagramLayout,
   DiagramPreferences,
   HostMessage,
+  Position,
   WebviewMessage,
 } from "../shared/protocol";
 import type { ExportedField, ExportedTable, Location } from "@skema/model";
@@ -62,6 +63,12 @@ export function setPreference<K extends keyof DiagramPreferences>(
 
 export function announceReady(): void {
   post({ type: "ready" });
+}
+
+/** This window's in-flight drag, forwarded to the extension's collaboration
+ *  session (if one is active - the extension silently drops it otherwise). */
+export function publishDrag(positions: Record<string, Position> | null): void {
+  post({ type: "publishDrag", positions });
 }
 
 /** Subscribes to everything the extension pushes. */

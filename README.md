@@ -212,3 +212,47 @@ those declarations describe the LSP responses exactly.
 repo's `examples/generic`, through the diagram's own derivation code. A
 renamed field would otherwise arrive as `undefined` and quietly cost the
 diagram its relationship lines.
+
+## Collaboration (diagram presence)
+
+`skema: Start collaboration session` / `skema: Join collaboration session`
+let a VSCode user and a `skema-editor` user see each other's live drag on
+the diagram. Manual handshake only — one side runs the start command and
+gets an invite copied to the clipboard, the other runs the join command
+with it and gets an answer copied back; `skema: Complete collaboration
+session` finishes it on the host's side. Ending it — `skema: End
+collaboration session`, or just closing the diagram panel — ends it for the
+other side too, the same star-topology rule `skema-editor` follows.
+
+All of the networking runs in the extension host (`src/collab/`), never the
+webview — its content-security-policy has no `connect-src`
+(`src/diagram/panel.ts`'s `html()`), and this keeps it that way. VSCode has
+no built-in WebRTC, so `src/collab/link.ts` uses
+[`werift`](https://github.com/shinyoshiaki/werift-webrtc), a pure-JS/TS
+implementation, instead of the browser's `RTCPeerConnection` — its API
+mirrors the W3C shape closely enough that `link.ts` is a direct port of
+`skema-editor`'s `PeerLink` (`connection.ts`), not a rewrite. Only the
+manual, hand-carried-offer/answer mode exists here — there is no
+broker/PeerJS-equivalent path, since PeerJS's client assumes a browser.
+
+The wire format itself — message framing and invite encoding — comes from
+`@skema/collab-protocol` (`skema-lib`), shared with `skema-editor` so the
+two hosts can join the same session at all. See that package's own README
+for what it does and does not cover.
+
+This is the foundation a later live-text-co-editing feature will build on:
+the `Y.Doc`/`Awareness` pair and the transport already exist here even
+though nothing today writes shared text into the `Y.Doc`.
+
+### Using an unreleased skema-lib package
+
+`@skema/collab-protocol` has no published version yet. Same situation
+`@skema/wasm` was in before its first release, and the same fix: build and
+pack it in a sibling `skema-lib` checkout, then point this repo's
+dependency at the `.tgz`:
+
+```bash
+cd ../skema-lib
+npm install && npm run build --workspace @skema/collab-protocol
+npm pack ./collab-protocol --pack-destination ./collab-protocol
+```

@@ -23,6 +23,8 @@ import {
 } from "vscode-languageclient/node";
 
 import { MODEL_CHANGED_NOTIFICATION } from "../shared/protocol";
+import { loadIdentity } from "./collab/identity";
+import { completeHosting, endSession, isActive, joinSession, startHosting } from "./collab/session";
 import { DiagramPanel, readPreferences } from "./diagram/panel";
 import { DocumentationProvider, renderDocumentation } from "./docs/provider";
 import { ServerNotFound, resolveServer } from "./server";
@@ -56,6 +58,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       await stop();
       await start(context);
     }),
+    vscode.commands.registerCommand("skema.collab.startSession", () => startCollabSession(context)),
+    vscode.commands.registerCommand("skema.collab.completeSession", () => completeCollabSession()),
+    vscode.commands.registerCommand("skema.collab.joinSession", () => joinCollabSession(context)),
+    vscode.commands.registerCommand("skema.collab.endSession", () => endCollabSession()),
     // A changed server path means a different server; a changed diagram
     // option has to reach the open panel.
     vscode.workspace.onDidChangeConfiguration(async (event) => {
@@ -160,4 +166,85 @@ async function exportDocumentation(): Promise<void> {
 
   await vscode.workspace.fs.writeFile(target, Buffer.from(markdown, "utf8"));
   void vscode.window.showInformationMessage(`Exported skema documentation to ${target.fsPath}`);
+}
+
+/**
+ * Starts hosting: opens the diagram (a session is only visible through its
+ * presence on the canvas) and hands out an invite for one guest to answer.
+ *
+ * Manual, hand-carried handshake only - see `collab/link.ts` for why there
+ * is no broker/auto-link path here. `showInputBox`/the clipboard stand in
+ * for `skema-editor`'s `CollabPanel`: enough for a first version, not a
+ * full panel.
+ */
+async function startCollabSession(context: vscode.ExtensionContext): Promise<void> {
+  if (!client) {
+    void vscode.window.showWarningMessage("The skema language server is not running.");
+    return;
+  }
+  if (isActive()) {
+    void vscode.window.showWarningMessage("A collaboration session is already active.");
+    return;
+  }
+  DiagramPanel.show(context, client, vscode.window.activeTextEditor?.document.uri);
+  try {
+    const invite = await startHosting(loadIdentity(context.globalState));
+    await vscode.env.clipboard.writeText(invite);
+    void vscode.window.showInformationMessage(
+      "Collaboration invite copied to clipboard - send it to whoever is joining. " +
+        'Once they answer, run "skema: Complete collaboration session" with what they send back.',
+    );
+  } catch (error) {
+    void vscode.window.showErrorMessage(
+      `Could not start a collaboration session: ${String(error)}`,
+    );
+  }
+}
+
+/** The host side of completing a handshake: the guest's answer, pasted back. */
+async function completeCollabSession(): Promise<void> {
+  const answer = await vscode.window.showInputBox({
+    prompt: "Paste the answer your collaborator sent back",
+    ignoreFocusOut: true,
+  });
+  if (!answer) return;
+  try {
+    await completeHosting(answer);
+  } catch (error) {
+    void vscode.window.showErrorMessage(`Could not complete the session: ${String(error)}`);
+  }
+}
+
+/** Joins a session from an invite pasted in, and hands back the answer to
+ *  send to whoever is hosting. */
+async function joinCollabSession(context: vscode.ExtensionContext): Promise<void> {
+  if (!client) {
+    void vscode.window.showWarningMessage("The skema language server is not running.");
+    return;
+  }
+  if (isActive()) {
+    void vscode.window.showWarningMessage("A collaboration session is already active.");
+    return;
+  }
+  const invite = await vscode.window.showInputBox({
+    prompt: "Paste the collaboration invite you were sent",
+    ignoreFocusOut: true,
+  });
+  if (!invite) return;
+  DiagramPanel.show(context, client, vscode.window.activeTextEditor?.document.uri);
+  try {
+    const answer = await joinSession(loadIdentity(context.globalState), invite);
+    await vscode.env.clipboard.writeText(answer);
+    void vscode.window.showInformationMessage(
+      "Answer copied to clipboard - send it back to whoever invited you.",
+    );
+  } catch (error) {
+    void vscode.window.showErrorMessage(`Could not join the session: ${String(error)}`);
+  }
+}
+
+function endCollabSession(): void {
+  if (!isActive()) return;
+  endSession();
+  void vscode.window.showInformationMessage("Collaboration session ended.");
 }

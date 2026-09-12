@@ -52,6 +52,22 @@
       {
         "command": "skema.restartServer",
         "title": "skema: Restart language server"
+      },
+      {
+        "command": "skema.collab.startSession",
+        "title": "skema: Start collaboration session"
+      },
+      {
+        "command": "skema.collab.completeSession",
+        "title": "skema: Complete collaboration session"
+      },
+      {
+        "command": "skema.collab.joinSession",
+        "title": "skema: Join collaboration session"
+      },
+      {
+        "command": "skema.collab.endSession",
+        "title": "skema: End collaboration session"
       }
     ],
     "menus": {
@@ -127,12 +143,16 @@
   },
   "dependencies": {
     "@dagrejs/dagre": "^3.1.1",
+    "@skema/collab-protocol": "file:../skema-lib/collab-protocol/skema-collab-protocol-0.1.0.tgz",
     "@skema/diagram": "^0.1.0",
     "@skema/model": "^0.1.4",
     "@xyflow/react": "^12.11.6",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "vscode-languageclient": "^9.0.1",
+    "werift": "^0.24.4",
+    "y-protocols": "^1.0.7",
+    "yjs": "^13.6.32",
     "zustand": "^5.0.15"
   },
   "devDependencies": {

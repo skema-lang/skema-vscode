@@ -10,6 +10,7 @@
  */
 import { useMemo, type JSX } from "react";
 
+import { publishDrag, useRemoteDrags } from "../collab/presence";
 import { revealLocation, saveLayout } from "../host";
 import { usePreferences } from "../preferences";
 import { useProject } from "../store";
@@ -19,6 +20,7 @@ import {
   DiagramView,
   type DiagramChrome,
   type DiagramHost,
+  type DiagramPresence,
   type DiagramSource,
 } from "@skema/diagram";
 
@@ -66,5 +68,19 @@ export function DiagramPane(): JSX.Element {
     [edgeRouting, snapToGrid, gridSize],
   );
 
-  return <DiagramView source={source} preferences={preferences} host={host} chrome={chrome} />;
+  const remoteDrags = useRemoteDrags();
+  const presence: DiagramPresence = useMemo(
+    () => ({ remoteDrags, publishDrag }),
+    [remoteDrags],
+  );
+
+  return (
+    <DiagramView
+      source={source}
+      preferences={preferences}
+      host={host}
+      chrome={chrome}
+      presence={presence}
+    />
+  );
 }

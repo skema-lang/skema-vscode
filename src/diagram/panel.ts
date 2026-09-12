@@ -19,10 +19,12 @@ import {
   type HostMessage,
   type DiagramLayout,
   type ModelResponse,
+  type RemoteDrag,
   type WebviewMessage,
 } from "../../shared/protocol";
+import { endSession, publishDrag, setListener, type Listener } from "../collab/session";
 
-export class DiagramPanel {
+export class DiagramPanel implements Listener {
   private static current: DiagramPanel | undefined;
 
   private readonly disposables: vscode.Disposable[] = [];
@@ -88,6 +90,9 @@ export class DiagramPanel {
   ) {
     this.subject = subject;
     this.panel.webview.html = this.html();
+    // Exactly one panel exists at a time (`show()` reuses `current`), so
+    // this is the only place a listener is ever registered.
+    setListener(this);
 
     this.disposables.push(
       this.panel.webview.onDidReceiveMessage((message: WebviewMessage) =>
@@ -104,6 +109,10 @@ export class DiagramPanel {
 
   private dispose(): void {
     DiagramPanel.current = undefined;
+    // Presence has no UI surface outside this panel, and this is the only
+    // registered `Listener` - closing it without ending the session would
+    // leave a WebRTC link running with nowhere to show what it reports.
+    endSession();
     for (const disposable of this.disposables.splice(0)) disposable.dispose();
     this.panel.dispose();
   }
@@ -152,7 +161,22 @@ export class DiagramPanel {
           .getConfiguration("skema.diagram")
           .update(message.key, message.value, vscode.ConfigurationTarget.Workspace);
         break;
+      case "publishDrag":
+        publishDrag(message.positions);
+        break;
     }
+  }
+
+  /** `Listener`: relayed to the webview the same way model/layout data
+   *  already is - the webview never touches Yjs/awareness directly. */
+  onRemoteDragsChanged(remoteDrags: RemoteDrag[]): void {
+    this.post({ type: "presence", remoteDrags });
+  }
+
+  /** `Listener`: reuses the diagram's own status line rather than adding a
+   *  second one just for collaboration notices. */
+  onStatusChanged(message: string): void {
+    this.post({ type: "status", message });
   }
 
   /** Opens the declaration a double-click (or a clicked relationship line)

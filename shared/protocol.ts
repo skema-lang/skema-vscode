@@ -20,9 +20,15 @@ import type { Diagnostic, EnumMeta, ExportedModel, GroupMeta, Location, TableMet
 // description of the same shape could only ever drift from it. Both modules
 // are free of React, so importing them here does not pull a UI framework
 // into the extension host.
-import type { DiagramLayout, DiagramPreferences, FileStyles } from "@skema/diagram";
+import type {
+  DiagramLayout,
+  DiagramPreferences,
+  FileStyles,
+  Position,
+  RemoteDrag,
+} from "@skema/diagram";
 
-export type { DiagramLayout, DiagramPreferences, FileStyles };
+export type { DiagramLayout, DiagramPreferences, FileStyles, Position, RemoteDrag };
 
 // ---------------------------------------------------------------- LSP side
 
@@ -62,7 +68,14 @@ export type HostMessage =
   | { type: "model"; model: ModelResponse }
   | { type: "layout"; layout: DiagramLayout }
   | { type: "preferences"; preferences: DiagramPreferences }
-  | { type: "status"; message: string };
+  | { type: "status"; message: string }
+  | {
+      /** Everyone else's in-flight drag, from the extension host's
+       *  collaboration session (`src/collab/session.ts`) - the webview
+       *  never touches Yjs/awareness directly, per the CSP boundary. */
+      type: "presence";
+      remoteDrags: RemoteDrag[];
+    };
 
 /** Webview → extension. */
 export type WebviewMessage =
@@ -81,4 +94,10 @@ export type WebviewMessage =
        *  the model rather than in any `.skema` source. */
       type: "layout";
       layout: DiagramLayout;
+    }
+  | {
+      /** This window's own in-flight drag; `null` ends it. Forwarded to the
+       *  collaboration session's awareness, if one is active. */
+      type: "publishDrag";
+      positions: Record<string, Position> | null;
     };

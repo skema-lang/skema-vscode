@@ -9,6 +9,7 @@ import { StrictMode, useEffect, useState, type JSX } from "react";
 import { createRoot } from "react-dom/client";
 
 import type { Diagnostic } from "@skema/model";
+import { usePresence } from "./collab/presence";
 import { DiagramPane } from "./diagram/DiagramPane";
 import { announceReady, onHostMessage, revealLocation } from "./host";
 import { usePreferences } from "./preferences";
@@ -70,6 +71,7 @@ function App(): JSX.Element {
   const applyModel = useProject((s) => s.applyModel);
   const applyLayout = useProject((s) => s.applyLayout);
   const applyPreferences = usePreferences((s) => s.apply);
+  const applyPresence = usePresence((s) => s.applyPresence);
   const [status, setStatus] = useState<string | null>(null);
   const [seen, setSeen] = useState(false);
 
@@ -90,13 +92,16 @@ function App(): JSX.Element {
         case "status":
           setStatus(message.message);
           break;
+        case "presence":
+          applyPresence(message.remoteDrags);
+          break;
       }
     });
     // Only now is the listener attached - announcing earlier would race the
     // first model straight past it.
     announceReady();
     return stop;
-  }, [applyModel, applyLayout, applyPreferences]);
+  }, [applyModel, applyLayout, applyPreferences, applyPresence]);
 
   return (
     <div className="shell">
