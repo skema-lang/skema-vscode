@@ -1,56 +1,27 @@
 ## skemavscode — GitLab CI/CD
 ##
-## Two kinds of pipeline.
+## Packages `@skema/model` and `@skema/diagram` used to be `file:` paths to
+## sibling checkouts, which only worked on dev machines. CI has no siblings;
+## npm links `file:` dependencies without checking targets, and the failure
+## surfaced as "Cannot find module '@skema/model'" in tsc. Now both resolve
+## through the group registry endpoint, which is public.
 ##
-## On merge requests and the default branch: typecheck, test and bundle. No
-## Rust, no server binary — everything here is TypeScript. Two of the packages
-## it is written against live in other projects of the group: `@skema/model`,
-## generated in the language repo, and `@skema/diagram` from skema-lib. Both
-## resolve through the group registry endpoint in .npmrc, which is public, so
-## `npm ci` needs no token. They used to be `file:` paths to sibling checkouts,
-## which only ever worked on a developer machine: CI has no siblings, npm links
-## a `file:` dependency without checking that the target exists, and the whole
-## failure surfaced as "Cannot find module '@skema/model'" in tsc.
+## On a tag, both platform-specific and platform-neutral VSIXes are built.
+## The neutral one is intentional: macOS users install it until there is a
+## macOS runner (no server needed; falls back to `skema.serverPath` or `PATH`).
 ##
-## On a tag: one **platform-specific VSIX per platform**, each with that
-## platform's `skema-lsp` pulled from the language project's package
-## registry (`npm run fetch:server`), plus one **platform-neutral VSIX** with
-## no server in it at all. The neutral one is not a leftover: it is what
-## macOS users install until there is a macOS runner to build a Darwin
-## binary on, and it works — the extension falls back to `skema.serverPath`
-## or a `skema-lsp` on `PATH`. All three are then uploaded to this project's
-## own generic package registry (`publish-generic-package`) so they have a
-## permanent, directly downloadable URL — the `*.vsix` job artifacts above
-## still exist for quick pipeline-page access, but expire in a month.
-##
-## A third entry point: skema-lib triggers this project whenever it publishes
-## something, with `SKEMA_VERSIONS` listing exact versions ("@skema/model@0.2.1
-## skema-lsp@0.2.1"). The `adopt-release` job pins the ones this extension uses
-## (`skema-lsp` as `skemaServer.version`), bumps the extension's own version by
-## the largest step any of them took, and tags — which starts the ordinary tag
-## pipeline above. The version is this extension's own; it does not mirror the
-## language's.
-##
-## Tagging this repo directly works too, with no `adopt-release` involved:
-## bump `version`, commit, `git tag vX.Y.Z && git push origin vX.Y.Z`.
-## `fetch:server` in the `package` job always bundles `skemaServer.version`.
+## Release design: see CLAUDE.md, "Releasing — the chain".
 ##
 ## Prerequisites in the GitLab project settings:
 ##   - A `SKEMA_REGISTRY_TOKEN` CI variable (a `read_api` token for the
-##     language project) if that project is private. A public one needs
-##     nothing.
+##     language project) if that project is private.
 ##   - Settings → CI/CD → Job token permissions → **Allow Git push requests to
-##     the repository**. Off by default; GA in GitLab 18.4 and available on
-##     every tier. This is what lets `adopt-release` commit and tag with
-##     nothing but `CI_JOB_TOKEN` — no personal or project access token.
+##     the repository** (GA in GitLab 18.4; required for `adopt-release`).
 ##   - A `RELEASE_TRIGGER_TOKEN` CI variable, masked and protected: a pipeline
-##     trigger token (Settings → CI/CD → Pipeline trigger tokens). A job-token
-##     push deliberately starts no pipeline, so the tag pipeline that packages
-##     the VSIX has to be asked for explicitly.
+##     trigger token (Settings → CI/CD → Pipeline trigger tokens).
 ##   - Settings → CI/CD → Job token permissions: allow
-##     `skema-language/skema-lib` to trigger this project, or its handoff job
-##     gets a 404.
-##   - `VSCE_PAT` if the `publish` job below is ever enabled.
+##     `skema-language/skema-lib` to trigger this project.
+##   - `VSCE_PAT` if the `publish` job is enabled.
 
 workflow:
   rules:
