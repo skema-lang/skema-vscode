@@ -102,9 +102,9 @@ extension looks for it in three places, in order:
 | 3 | **`PATH`** | A `cargo install`ed one. This is what the platform-neutral VSIX relies on. |
 
 The binary is **never committed here**. It is a release artifact of the
-language repo, and this extension's own `version` in `package.json` decides
-which release a build bundles — the three repos move in lockstep, so there is
-no second version to keep in sync (`skemaServer.comment` in `package.json`).
+language repo; `skemaServer.version` in `package.json` decides which release a
+build bundles, independent of the extension's own `version`, and
+`adopt-release` moves it when skema-lib hands a new one down.
 `SKEMA_SERVER_VERSION` overrides it when you need a different one on purpose.
 
 ### Building a VSIX
@@ -246,11 +246,11 @@ though nothing today writes shared text into the `Y.Doc`.
 
 ### Using an unreleased skema-lib package
 
-`@skema/collab-protocol` and `@skema/docs` (the model-as-Markdown renderer,
-`src/docs/provider.ts`) have no published version yet. Same situation
-`@skema/wasm` was in before its first release, and the same fix: build and
-pack the package in a sibling `skema-lib` checkout, then point this repo's
-dependency at the `.tgz`:
+To try a change to `@skema/collab-protocol`, `@skema/docs` (the
+model-as-Markdown renderer, `src/docs/provider.ts`) or `@skema/diagram` before
+it is published: build and pack the package in a sibling `skema-lib` checkout,
+then point this repo's dependency at the `.tgz`. Never commit that pointer; CI
+has no sibling checkout.
 
 ```bash
 cd ../skema-lib
