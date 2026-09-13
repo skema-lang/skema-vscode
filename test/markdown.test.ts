@@ -65,6 +65,6 @@ test("groups list their members, qualified", () => {
 });
 
 test("an empty model says so instead of rendering nothing", () => {
-  const empty = modelToMarkdown({ tables: [], enums: [], groups: [] }, () => undefined);
+  const empty = modelToMarkdown({ tables: [], enums: [], groups: [], dialect: undefined }, () => undefined);
   assert.match(empty, /Nothing to document yet/);
 });

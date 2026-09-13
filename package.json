@@ -143,10 +143,10 @@
   },
   "dependencies": {
     "@dagrejs/dagre": "^3.1.1",
-    "@skema/collab-protocol": "file:../skema-lib/collab-protocol/skema-collab-protocol-0.1.1.tgz",
-    "@skema/diagram": "^0.1.0",
-    "@skema/docs": "file:../skema-lib/docs/skema-docs-0.1.0.tgz",
-    "@skema/model": "^0.1.4",
+    "@skema/collab-protocol": "0.1.1",
+    "@skema/diagram": "0.1.1",
+    "@skema/docs": "0.1.1",
+    "@skema/model": "0.2.2",
     "@xyflow/react": "^12.11.6",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
@@ -167,7 +167,7 @@
   },
   "skemaServer": {
     "comment": "Which skema-lsp release `npm run fetch:server` bundles. Independent of this extension's own `version`; `adopt-release` moves it when skema-lsp is handed down. Override with SKEMA_SERVER_VERSION to pull a different one on purpose.",
-    "version": "0.1.0",
+    "version": "0.2.2",
     "project": "skema-language/skema",
     "registry": "https://gitlab.com"
   }
