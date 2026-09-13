@@ -15,8 +15,9 @@
 import * as vscode from "vscode";
 import * as Y from "yjs";
 
+import { sharedFiles } from "@skema/collab-protocol";
+
 import { relativePath } from "./projectPaths";
-import { sharedFiles } from "./projectSync";
 import {
   applyLocalChange,
   editsFromDelta,

@@ -1,14 +1,10 @@
 /**
- * The shared project map: which files a co-editing session carries, keyed
- * the same way on both hosts.
- *
- * `FILES`/`META`/`ROOT` and this map's shape must match
- * `skema-editor/src/collab/projectBinding.ts`'s `sharedFiles(doc)` exactly -
- * it is the same `Y.Doc` a browser guest reads. Duplicated here rather than
- * imported because `skema-editor` is an app, not a published package;
- * [brain/tasks/21](../../../../brain/tasks/21-extract-shared-project-map-shape.md)
- * tracks moving it into `@skema/collab-protocol` so both hosts import one
- * definition instead of two that must be kept in sync by hand.
+ * Seeding and adopting the shared project map: task 20's host/guest
+ * whole-project logic on top of `@skema/collab-protocol`'s `projectMap.ts`
+ * shape (`sharedFiles`/`sharedMeta`/`ROOT_PATH_KEY`,
+ * [brain/tasks/21](../../../../brain/tasks/21-extract-shared-project-map-shape.md)),
+ * the same one `skema-editor/src/collab/projectBinding.ts` uses - it is the
+ * same `Y.Doc` a browser guest reads.
  *
  * Deliberately free of `vscode`: reading a document's live text and writing
  * one to disk are host-specific (`textBinding.ts`, `extension.ts`), but
@@ -16,17 +12,7 @@
  */
 import * as Y from "yjs";
 
-const FILES = "files";
-const META = "meta";
-const ROOT = "rootPath";
-
-export function sharedFiles(doc: Y.Doc): Y.Map<Y.Text> {
-  return doc.getMap<Y.Text>(FILES);
-}
-
-function sharedMeta(doc: Y.Doc): Y.Map<string> {
-  return doc.getMap<string>(META);
-}
+import { ROOT_PATH_KEY, sharedFiles, sharedMeta } from "@skema/collab-protocol";
 
 export interface ProjectFile {
   /** The root-relative key both hosts key this file by
@@ -46,7 +32,7 @@ export function seedProject(doc: Y.Doc, rootPath: string, files: ProjectFile[]):
   const meta = sharedMeta(doc);
   doc.transact(() => {
     for (const file of files) shared.set(file.path, new Y.Text(file.text));
-    meta.set(ROOT, rootPath);
+    meta.set(ROOT_PATH_KEY, rootPath);
   });
 }
 
@@ -62,7 +48,7 @@ export interface AdoptedProject {
 export function adoptProject(doc: Y.Doc): AdoptedProject {
   const shared = sharedFiles(doc);
   return {
-    rootPath: sharedMeta(doc).get(ROOT),
+    rootPath: sharedMeta(doc).get(ROOT_PATH_KEY),
     files: [...shared.entries()].map(([path, text]) => ({ path, text: text.toString() })),
   };
 }

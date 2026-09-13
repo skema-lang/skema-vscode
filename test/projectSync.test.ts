@@ -3,7 +3,9 @@ import { test } from "node:test";
 
 import * as Y from "yjs";
 
-import { adoptProject, seedProject, sharedFiles } from "../src/collab/projectSync";
+import { sharedFiles } from "@skema/collab-protocol";
+
+import { adoptProject, seedProject } from "../src/collab/projectSync";
 
 test("seedProject writes every file's content into the shared map", () => {
   const doc = new Y.Doc();
