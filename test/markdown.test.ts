@@ -9,15 +9,16 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 
+import { modelToMarkdown } from "@skema/docs";
 import type { ModelResponse } from "../shared/protocol";
-import { modelToMarkdown } from "../shared/markdown";
+import { getNoteFrom } from "../src/docs/notes";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fixture = JSON.parse(
   readFileSync(join(here, "fixtures", "model.json"), "utf8"),
 ) as ModelResponse;
 
-const markdown = modelToMarkdown(fixture.model, fixture.metas);
+const markdown = modelToMarkdown(fixture.model, getNoteFrom(fixture.metas));
 
 test("tables are grouped under their document namespace", () => {
   assert.match(markdown, /## catalog/);
@@ -64,6 +65,6 @@ test("groups list their members, qualified", () => {
 });
 
 test("an empty model says so instead of rendering nothing", () => {
-  const empty = modelToMarkdown({ tables: [], enums: [], groups: [] }, []);
+  const empty = modelToMarkdown({ tables: [], enums: [], groups: [] }, () => undefined);
   assert.match(empty, /Nothing to document yet/);
 });

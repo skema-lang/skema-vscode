@@ -246,13 +246,17 @@ though nothing today writes shared text into the `Y.Doc`.
 
 ### Using an unreleased skema-lib package
 
-`@skema/collab-protocol` has no published version yet. Same situation
+`@skema/collab-protocol` and `@skema/docs` (the model-as-Markdown renderer,
+`src/docs/provider.ts`) have no published version yet. Same situation
 `@skema/wasm` was in before its first release, and the same fix: build and
-pack it in a sibling `skema-lib` checkout, then point this repo's
+pack the package in a sibling `skema-lib` checkout, then point this repo's
 dependency at the `.tgz`:
 
 ```bash
 cd ../skema-lib
 npm install && npm run build --workspace @skema/collab-protocol
 npm pack ./collab-protocol --pack-destination ./collab-protocol
+# and the same for docs:
+npm run build --workspace @skema/docs
+npm pack ./docs --pack-destination ./docs
 ```

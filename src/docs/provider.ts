@@ -11,8 +11,9 @@
 import * as vscode from "vscode";
 import type { LanguageClient } from "vscode-languageclient/node";
 
+import { modelToMarkdown } from "@skema/docs";
 import { MODEL_REQUEST, type ModelResponse } from "../../shared/protocol";
-import { modelToMarkdown } from "../../shared/markdown";
+import { getNoteFrom } from "./notes";
 
 export const SCHEME = "skema-docs";
 export const PREVIEW_URI = vscode.Uri.parse(`${SCHEME}:/Model.md`);
@@ -30,7 +31,7 @@ export async function renderDocumentation(
       uri: uri.toString(),
     });
     if (!response) return "_No model for this file yet._";
-    return modelToMarkdown(response.model, response.metas);
+    return modelToMarkdown(response.model, getNoteFrom(response.metas));
   } catch (error) {
     return `_Could not read the model: ${String(error)}_`;
   }
