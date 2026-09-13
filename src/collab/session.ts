@@ -7,16 +7,18 @@
  * this keeps that boundary untouched. Presence reaches the webview the same
  * way model/layout data already does: a `HostMessage` over `postMessage`.
  *
- * Deliberately simpler than `skema-editor`'s `session.ts` in three ways
- * this task does not need yet:
+ * Deliberately simpler than `skema-editor`'s `session.ts` in two ways this
+ * task does not need yet:
  * - No broker/auto-link mode - see `link.ts` for why.
- * - No shared-text binding. The `Y.Doc` exists so the wire protocol has
- *   something to synchronize, and so [task
- *   20](../../../../brain/tasks/20-vscode-live-text-coediting.md) can reuse
- *   this same session and transport instead of standing up a second one;
- *   nothing in this task writes to it.
  * - Exactly one link, not a host's several: a VSCode user and a browser
  *   user pairing off, not a multi-guest star hosted from this side.
+ *
+ * The shared-text binding [task
+ * 20](../../../../brain/tasks/20-vscode-live-text-coediting.md) needed is
+ * layered on top rather than living here: `projectSync.ts`/`projectHost.ts`
+ * seed and adopt the project map, `textBinding.ts` binds it to open
+ * documents, and `extension.ts` wires both to `onProjectSynced` below. This
+ * module stays the transport and presence, exactly as before.
  */
 import { Awareness } from "y-protocols/awareness";
 import * as Y from "yjs";
@@ -51,6 +53,11 @@ export interface Listener {
   /** A human-readable line for the status bar / an information message -
    *  connected, disconnected, why a link never came up. */
   onStatusChanged(message: string): void;
+  /** Fires once, the moment this side has everything the other side had
+   *  when the link came up (`readSync`'s `complete`). A host's project is
+   *  already seeded by then (`extension.ts` seeds before handing out the
+   *  invite); a guest uses this moment to adopt it. */
+  onProjectSynced(): void;
 }
 
 class Session {
@@ -112,7 +119,10 @@ class Session {
       onDoc: (message, link) => {
         const { reply, complete } = readSync(this.doc, message, link);
         if (reply) link.sendDoc(reply);
-        if (complete) this.listener.onStatusChanged(`Connected to ${link.name}.`);
+        if (complete) {
+          this.listener.onStatusChanged(`Connected to ${link.name}.`);
+          this.listener.onProjectSynced();
+        }
       },
       onAwareness: (message, link) => readAwareness(this.awareness, message, link),
       onAwarenessReady: (link) => {
@@ -223,6 +233,14 @@ export function isActive(): boolean {
 
 export function role(): SessionRole | undefined {
   return current?.role;
+}
+
+/** The active session's shared document - `undefined` when there is no
+ *  session, the same lifetime `isActive()` already describes. Exposed so
+ *  `textBinding.ts` can bind open documents to it and `projectHost.ts` can
+ *  seed/adopt it, without either owning the session's lifecycle. */
+export function currentDoc(): Y.Doc | undefined {
+  return current?.doc;
 }
 
 /** Host side: starts a session and returns the invite to hand to a guest. */

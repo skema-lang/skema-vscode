@@ -39,6 +39,37 @@ export function applyLocalChange(doc: Y.Doc, text: Y.Text, edit: OffsetEdit, ori
   }, origin);
 }
 
+/** VSCode's own shape for one run of a content-change event - duck-typed
+ *  rather than imported so this stays free of a `vscode` dependency. */
+export interface ContentChange {
+  rangeOffset: number;
+  rangeLength: number;
+  text: string;
+}
+
+/**
+ * Turns one `onDidChangeTextDocument` event's changes into {@link OffsetEdit}s
+ * safe to apply one after another onto the same `Y.Text`.
+ *
+ * Every change's `rangeOffset`/`rangeLength` is reported against the
+ * document as it stood *before* the whole event - true for a single
+ * keystroke, and also for the several simultaneous changes a multi-cursor
+ * edit produces. Applying them highest-offset-first means each edit lands
+ * before anything below it has been touched, so an offset computed against
+ * the pre-event document is still valid when its turn comes; the reverse
+ * order would need every later offset re-adjusted by how much earlier ones
+ * shifted the text.
+ */
+export function localEditsFromContentChanges(changes: readonly ContentChange[]): OffsetEdit[] {
+  return changes
+    .map((change) => ({
+      start: change.rangeOffset,
+      end: change.rangeOffset + change.rangeLength,
+      text: change.text,
+    }))
+    .sort((a, b) => b.start - a.start);
+}
+
 /**
  * Turns a `Y.Text` delta into the minimal offset edits a `WorkspaceEdit`
  * needs - one edit per insert/delete run, not one per character. A

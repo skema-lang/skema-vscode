@@ -186,9 +186,10 @@ async function startCollabSession(context: vscode.ExtensionContext): Promise<voi
     void vscode.window.showWarningMessage("A collaboration session is already active.");
     return;
   }
-  DiagramPanel.show(context, client, vscode.window.activeTextEditor?.document.uri);
+  const panel = DiagramPanel.show(context, client, vscode.window.activeTextEditor?.document.uri);
   try {
     const invite = await startHosting(loadIdentity(context.globalState));
+    await panel.beginCollabSync("host");
     await vscode.env.clipboard.writeText(invite);
     void vscode.window.showInformationMessage(
       "Collaboration invite copied to clipboard - send it to whoever is joining. " +
@@ -231,9 +232,10 @@ async function joinCollabSession(context: vscode.ExtensionContext): Promise<void
     ignoreFocusOut: true,
   });
   if (!invite) return;
-  DiagramPanel.show(context, client, vscode.window.activeTextEditor?.document.uri);
+  const panel = DiagramPanel.show(context, client, vscode.window.activeTextEditor?.document.uri);
   try {
     const answer = await joinSession(loadIdentity(context.globalState), invite);
+    await panel.beginCollabSync("guest");
     await vscode.env.clipboard.writeText(answer);
     void vscode.window.showInformationMessage(
       "Answer copied to clipboard - send it back to whoever invited you.",
@@ -245,6 +247,7 @@ async function joinCollabSession(context: vscode.ExtensionContext): Promise<void
 
 function endCollabSession(): void {
   if (!isActive()) return;
+  DiagramPanel.endCollabSync();
   endSession();
   void vscode.window.showInformationMessage("Collaboration session ended.");
 }

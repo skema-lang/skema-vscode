@@ -3,7 +3,7 @@ import { test } from "node:test";
 
 import * as Y from "yjs";
 
-import { applyLocalChange, editsFromDelta } from "../src/collab/textSync";
+import { applyLocalChange, editsFromDelta, localEditsFromContentChanges } from "../src/collab/textSync";
 
 test("a local insert lands at the given offset", () => {
   const doc = new Y.Doc();
@@ -105,6 +105,38 @@ test("a real Y.Text delta, translated and replayed on plain text, matches what Y
   assert.ok(observed, "the observer should have fired");
   assert.equal(applyDeltaToPlainString(before, observed), remoteText.toString());
   assert.equal(remoteText.toString(), "Table Customer {}");
+});
+
+test("localEditsFromContentChanges passes a single change through unchanged", () => {
+  const edits = localEditsFromContentChanges([{ rangeOffset: 6, rangeLength: 5, text: "Customer" }]);
+  assert.deepEqual(edits, [{ start: 6, end: 11, text: "Customer" }]);
+});
+
+test("localEditsFromContentChanges orders simultaneous changes from the highest offset down", () => {
+  // A two-cursor edit: VSCode reports both against the pre-event document,
+  // in no particular order.
+  const edits = localEditsFromContentChanges([
+    { rangeOffset: 2, rangeLength: 0, text: "X" },
+    { rangeOffset: 9, rangeLength: 0, text: "Y" },
+  ]);
+  assert.deepEqual(edits, [
+    { start: 9, end: 9, text: "Y" },
+    { start: 2, end: 2, text: "X" },
+  ]);
+});
+
+test("applying localEditsFromContentChanges highest-offset-first reconstructs the same text a batch WorkspaceEdit would", () => {
+  const source = "Table Order { id int; name text; }";
+  const changes = [
+    { rangeOffset: 6, rangeLength: 5, text: "Customer" },
+    { rangeOffset: 27, rangeLength: 4, text: "string" },
+  ];
+  const edits = localEditsFromContentChanges(changes);
+
+  let result = source;
+  for (const edit of edits) result = result.slice(0, edit.start) + edit.text + result.slice(edit.end);
+
+  assert.equal(result, "Table Customer { id int; name string; }");
 });
 
 /** Applies `edits` (as {@link editsFromDelta} would produce) to a plain

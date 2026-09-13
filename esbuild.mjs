@@ -61,6 +61,8 @@ const tests = {
     "test/markdown.test.ts",
     "test/groups.test.ts",
     "test/textSync.test.ts",
+    "test/projectPaths.test.ts",
+    "test/projectSync.test.ts",
   ],
   outdir: "dist/test",
   outExtension: { ".js": ".mjs" },
