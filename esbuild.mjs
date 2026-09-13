@@ -60,6 +60,7 @@ const tests = {
     "test/server.test.ts",
     "test/markdown.test.ts",
     "test/groups.test.ts",
+    "test/textSync.test.ts",
   ],
   outdir: "dist/test",
   outExtension: { ".js": ".mjs" },
