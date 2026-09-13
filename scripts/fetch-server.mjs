@@ -4,8 +4,9 @@
  * The binary is *not* committed here. It is a release artifact of the
  * language repo, published to that project's GitLab generic package registry
  * on a tag, and pulled in at packaging time - so this repo carries no
- * megabyte-sized blob per platform, and `skemaServer.version` in package.json
- * pins exactly which server it ships with (`adopt-release` moves it).
+ * megabyte-sized blob per platform. Its version is derived from the
+ * `@skema/model` dependency pin rather than stored separately: both come from
+ * the same skema-lang release, and `adopt-release.mjs` is what moves that pin.
  *
  * One binary per VSIX, because a VSIX is per platform: `vsce package
  * --target linux-x64` produces an artifact that only that platform ever
@@ -30,9 +31,25 @@ const root = resolve(here, "..");
 const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
 
 const config = manifest.skemaServer ?? {};
-const version = process.env.SKEMA_SERVER_VERSION ?? (config.version && `v${config.version}`);
 const project = process.env.SKEMA_PROJECT ?? config.project;
 const host = process.env.SKEMA_REGISTRY ?? config.registry;
+
+let version = process.env.SKEMA_SERVER_VERSION;
+if (!version) {
+  const modelPin = manifest.dependencies?.["@skema/model"];
+  if (!modelPin) {
+    console.error("No @skema/model dependency to derive the server version from. Set SKEMA_SERVER_VERSION.");
+    process.exit(1);
+  }
+  if (!/^\d+\.\d+\.\d+$/.test(modelPin)) {
+    console.error(
+      `@skema/model is pinned to a range (${modelPin}), not an exact version - the server version can't be\n` +
+        "derived from it. Run adopt-release.mjs to pin it exactly, or set SKEMA_SERVER_VERSION.",
+    );
+    process.exit(1);
+  }
+  version = `v${modelPin}`;
+}
 
 /**
  * VSCode's platform names ↔ Rust target triples. VSCode decides which VSIX a
@@ -63,10 +80,6 @@ const triple = TARGETS[vscodeTarget];
 
 if (!triple) {
   console.error(`Unknown target ${vscodeTarget}. One of: ${Object.keys(TARGETS).join(", ")}`);
-  process.exit(1);
-}
-if (!version) {
-  console.error("No server version. Set skemaServer.version in package.json or SKEMA_SERVER_VERSION.");
   process.exit(1);
 }
 

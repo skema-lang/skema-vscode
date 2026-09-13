@@ -166,8 +166,7 @@
     "typescript": "^5.7.2"
   },
   "skemaServer": {
-    "comment": "Which skema-lsp release `npm run fetch:server` bundles. Independent of this extension's own `version`; `adopt-release` moves it when skema-lsp is handed down. Override with SKEMA_SERVER_VERSION to pull a different one on purpose.",
-    "version": "0.2.2",
+    "comment": "Which skema-lsp release `npm run fetch:server` bundles: v<the @skema/model dependency's version>, since both come from the same skema-lang release. Override with SKEMA_SERVER_VERSION to pull a different one on purpose.",
     "project": "skema-language/skema",
     "registry": "https://gitlab.com"
   }
