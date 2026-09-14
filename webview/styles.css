@@ -102,8 +102,11 @@ body,
 
 /* --- Canvas ---------------------------------------------------------- */
 
+/* `--project-*` are what `Style @project` resolves to (`diagram/style.ts`,
+   `projectStyleVariables`): set inline on `<ReactFlow>`, so they fall back to
+   the theme the same way the `--node-*`/`--group-*` variables do. */
 .react-flow {
-  --xy-background-color: var(--sk-bg);
+  --xy-background-color: var(--project-bg, var(--sk-bg));
   --xy-edge-stroke: var(--sk-text-faint);
   --xy-edge-stroke-selected: var(--sk-accent);
 }
@@ -113,8 +116,17 @@ body,
   font-size: 10px;
 }
 
+/* `--edge-*` are what `Style @relation` resolves to (`diagram/style.ts`,
+   `edgeStyleVariables`): set inline per edge, so only a styled relation
+   leaves the theme default. */
+.react-flow__edge-path {
+  stroke: var(--edge-line-color, var(--xy-edge-stroke, var(--xy-edge-stroke-default)));
+  stroke-width: var(--edge-line-width, var(--xy-edge-stroke-width, var(--xy-edge-stroke-width-default)));
+  stroke-dasharray: var(--edge-line-dasharray, none);
+}
+
 .react-flow__edge.edge-one-to-one .react-flow__edge-path {
-  stroke-dasharray: 6 3;
+  stroke-dasharray: var(--edge-line-dasharray, 6 3);
 }
 
 .react-flow__edge {
@@ -179,6 +191,9 @@ body,
 
 /* --- A table node ---------------------------------------------------- */
 
+/* `font-size` is the one place `Style @project`'s `fontSize` lands
+   (`--project-font-size`, set on `<ReactFlow>`): the model content scales,
+   while chrome around it - the group label, the toolbar - stays fixed. */
 .table-node {
   background: var(--node-body-bg, var(--sk-surface));
   border: var(--node-border-width, 1px) var(--node-border-style, solid)
@@ -186,7 +201,7 @@ body,
   border-radius: 7px;
   overflow: hidden;
   font-family: var(--sk-mono);
-  font-size: 11px;
+  font-size: var(--project-font-size, 11px);
   color: var(--sk-text);
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
 }
