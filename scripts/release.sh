@@ -108,6 +108,8 @@ else
 fi
 
 MSG="chore(release): $NEXT_TAG"
+run git config user.email "${GITLAB_USER_EMAIL:-ci@skema-language}"
+run git config user.name "${GITLAB_USER_NAME:-skema release}"
 run git add package.json package-lock.json
 run git commit -m "$MSG"
 run git tag -a "$NEXT_TAG" -m "$MSG"
