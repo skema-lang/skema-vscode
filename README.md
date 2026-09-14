@@ -102,9 +102,10 @@ extension looks for it in three places, in order:
 | 3 | **`PATH`** | A `cargo install`ed one. This is what the platform-neutral VSIX relies on. |
 
 The binary is **never committed here**. It is a release artifact of the
-language repo; `skemaServer.version` in `package.json` decides which release a
-build bundles, independent of the extension's own `version`, and
-`adopt-release` moves it when skema-lib hands a new one down.
+language repo: the version bundled is derived from the `@skema/model`
+dependency pin (an exact `X.Y.Z`, or an `X.Y.Z-rc.N` release candidate),
+independent of the extension's own `version`. The release pipeline's `adopt`
+job moves that pin when skema-lib hands a new one down.
 `SKEMA_SERVER_VERSION` overrides it when you need a different one on purpose.
 
 ### Building a VSIX
@@ -116,9 +117,12 @@ npm run build
 npx vsce package --no-dependencies --target linux-x64
 ```
 
-CI does this per platform on a tag. Which platforms exist is decided by the
-language repo's release pipeline, and today that is **linux-x64** (musl,
-statically linked, so it runs on any distribution) and **win32-x64**.
+The release pipeline does this for every platform in its own `package`
+matrix job (`linux-x64`, `win32-x64`), plus one platform-neutral VSIX from
+`package-neutral` - three VSIXes per release, attached to the GitLab Release.
+Which platforms exist is decided by the language repo's release pipeline,
+and today that is **linux-x64** (musl, statically linked, so it runs on any
+distribution) and **win32-x64**.
 
 **macOS has no bundled binary**, and cannot get one from the current
 pipeline: cross-compiling for Darwin needs the Apple SDK, which is not

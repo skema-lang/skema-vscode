@@ -4,53 +4,73 @@
 ## `@skema/collab-protocol` resolve through the group registry endpoint (see
 ## .npmrc), not `file:` sibling paths — CI has no siblings.
 ##
-## On a tag, both platform-specific and platform-neutral VSIXes are built.
-## The neutral one is intentional: macOS users install it until there is a
-## macOS runner (no server needed; falls back to `skema.serverPath` or `PATH`).
+## Packaging builds three VSIXes: `linux-x64` and `win32-x64` each bundle
+## that platform's `skema-lsp` (scripts/fetch-server.mjs); the neutral one
+## ships with none and falls back to `skema.serverPath` or `PATH` — the only
+## option until there is a macOS runner.
 ##
 ## Release design: see CLAUDE.md, "Releasing — the chain", and
-## brain/release-chain.md. In short: `skema_lib_version`/`skema_lang_version`
-## inputs (never `SKEMA_VERSIONS`) drive an adoption commit, and this repo's
-## own next version is derived from conventional commits by git-cliff.
+## brain/release-chain.md. skema-vscode is the end of the chain — it adopts,
+## it hands nothing further down.
 ##
 ## Prerequisites in the GitLab project settings:
 ##   - A `SKEMA_REGISTRY_TOKEN` CI variable (a `read_api` token for the
-##     language project) if that project is private.
+##     language project) if that project is private — fetch-server.mjs needs
+##     it to download skema-lsp.
 ##   - Settings → CI/CD → Job token permissions → **Allow Git push requests to
-##     the repository** (GA in GitLab 18.4; required for the `release` job).
-##   - A `RELEASE_TRIGGER_TOKEN` CI variable, masked and protected: a pipeline
-##     trigger token (Settings → CI/CD → Pipeline trigger tokens), used both
-##     to start the tag pipeline after `release` pushes and, from skema-lib,
-##     to start this pipeline with the inputs below.
-##   - Settings → CI/CD → Job token permissions: allow
-##     `skema-language/skema-lib` to trigger this project.
-##   - `VSCE_PAT` if the `publish` job is enabled.
+##     the repository**, so the `release`/`adopt` jobs can push commits and
+##     tags.
+##   - Job token allowlist: allow `skema-language/skema-lib` to trigger this
+##     project, or a hand-down 404s.
+##   - `VSCE_PAT` if a Marketplace `publish` job is ever added (out of scope
+##     here).
 
 spec:
   inputs:
     skema_lib_version:
       type: string
       default: ""
-      description: "skema-lib release to pin (@skema/collab-protocol, @skema/diagram, @skema/docs), e.g. v0.1.1"
-      regex: '^(v[0-9]+\.[0-9]+\.[0-9]+)?$'
+      description: "skema-lib release to adopt (@skema/collab-protocol, @skema/diagram, @skema/docs), e.g. v0.1.1"
+      regex: '^(v\d+\.\d+\.\d+(-rc\.\d+)?)?$'
     skema_lang_version:
       type: string
       default: ""
-      description: "skema-lang release to pin (@skema/model), e.g. v0.2.2"
-      regex: '^(v[0-9]+\.[0-9]+\.[0-9]+)?$'
+      description: "skema-lang release to adopt (@skema/model), e.g. v0.2.3"
+      regex: '^(v\d+\.\d+\.\d+(-rc\.\d+)?)?$'
+    republish_version:
+      type: string
+      default: ""
+      description: "Existing own-release vX.Y.Z(-rc.N) to re-run the publish steps for"
+      regex: '^(v\d+\.\d+\.\d+(-rc\.\d+)?)?$'
+
 ---
+
+include:
+  - component: $CI_SERVER_FQDN/skema-language/skema-ci/release@0.1.0
+    inputs:
+      version_file_kind: npm
+      version_file_paths: "package.json package-lock.json"
+      generic_package_name: skemavscode
+      asset_globs: "*.vsix"
+      adopt_groups: >-
+        [{"label":"skema-lib","version":"$[[ inputs.skema_lib_version ]]","packages":["@skema/collab-protocol","@skema/diagram","@skema/docs"]},
+         {"label":"skema","version":"$[[ inputs.skema_lang_version ]]","packages":["@skema/model"]}]
+      verify_command: "npm ci && npm run typecheck && npm test && npm run build"
+      republish_version: $[[ inputs.republish_version ]]
+      adopt_stage: check
 
 workflow:
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_COMMIT_TAG
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_BRANCH == "development"
+    - if: $CI_COMMIT_BRANCH == "main"
 
 stages:
   - check
+  - version
   - package
-  - publish
   - release
+  - handoff
 
 default:
   image: node:22-bookworm-slim
@@ -67,72 +87,54 @@ variables:
     - .npm
   policy: pull-push
 
-# An input-triggered pipeline runs the `release` job's own adoption + verify
-# instead: `check`/`audit` would otherwise test the manifest from before
-# adoption pins land.
-.skip_with_release_input: &skip_with_release_input
+# An adoption-triggered pipeline (skema_lib_version/skema_lang_version set)
+# runs only the component's `adopt` job against the pre-adoption manifest;
+# these jobs would just redo that work against stale versions.
+.skip_with_adopt_input: &skip_with_adopt_input
   if: '"$[[ inputs.skema_lib_version ]]" != "" || "$[[ inputs.skema_lang_version ]]" != ""'
   when: never
-
-# Verified against the .sha512 GitHub publishes beside the archive - the one
-# thing this job pulls from outside GitLab.
-.install_git_cliff: &install_git_cliff
-  - apt-get update -qq
-  - apt-get install -y -qq --no-install-recommends git curl ca-certificates
-  - |
-    GIT_CLIFF_VERSION=2.10.1
-    GIT_CLIFF_ASSET="git-cliff-${GIT_CLIFF_VERSION}-x86_64-unknown-linux-musl.tar.gz"
-    curl -fsSL -O "https://github.com/orhun/git-cliff/releases/download/v${GIT_CLIFF_VERSION}/${GIT_CLIFF_ASSET}"
-    curl -fsSL -O "https://github.com/orhun/git-cliff/releases/download/v${GIT_CLIFF_VERSION}/${GIT_CLIFF_ASSET}.sha512"
-    sha512sum -c "${GIT_CLIFF_ASSET}.sha512"
-    tar xzf "$GIT_CLIFF_ASSET"
-    install -m 755 "git-cliff-${GIT_CLIFF_VERSION}/git-cliff" /usr/local/bin/git-cliff
-
-check:
-  stage: check
-  cache: *npm_cache
-  rules:
-    - *skip_with_release_input
-    - when: on_success
-  script:
-    - npm ci --prefer-offline --no-audit --fund=false
-    - npm run typecheck
-    # The fixture test is the one thing the compiler cannot do for us: it
-    # checks that the language server's JSON still matches the declarations
-    # `@skema/model` ships.
-    - npm test
-    - npm run build
 
 audit:
   stage: check
   cache: *npm_cache
   needs: []
-  allow_failure: true
   rules:
-    - *skip_with_release_input
+    - *skip_with_adopt_input
     - when: on_success
   script:
     - npm ci --prefer-offline --no-audit --fund=false
     - npm audit --audit-level=high
+  allow_failure: true
 
-# The bump git-cliff derives is the one thing nothing else checks, and a
-# wrong one is a wrong tag pushed downstream and to the package registry.
-release-test:
+# The fixture test is the one thing the compiler cannot do for us: it checks
+# that the language server's JSON still matches the declarations
+# `@skema/model` ships.
+check:
   stage: check
-  image: debian:bookworm-slim
+  cache: *npm_cache
   needs: []
-  variables:
-    GIT_DEPTH: 0
-  before_script: *install_git_cliff
+  rules:
+    - *skip_with_adopt_input
+    - when: on_success
   script:
-    - scripts/release-test.sh
+    - npm ci --prefer-offline --no-audit --fund=false
+    - npm run typecheck
+    - npm test
+    - npm run build
 
-# One VSIX per platform, each carrying that platform's server.
+# One VSIX per platform, each carrying that platform's server. Needs
+# `version`'s patched package.json for both the real RELEASE_VERSION (name)
+# and the version the manifest inside the VSIX itself carries.
 package:
   stage: package
   cache: *npm_cache
+  needs:
+    - job: version
+      artifacts: true
+      optional: true
   rules:
-    - if: $CI_COMMIT_TAG
+    - *skip_with_adopt_input
+    - when: on_success
   parallel:
     matrix:
       - VSCE_TARGET:
@@ -142,7 +144,7 @@ package:
     - npm ci --prefer-offline --no-audit --fund=false
     - npm run build
     - GITLAB_TOKEN="$SKEMA_REGISTRY_TOKEN" npm run fetch:server -- --target "$VSCE_TARGET"
-    - npx vsce package --no-dependencies --target "$VSCE_TARGET" --out "skemavscode-$VSCE_TARGET.vsix"
+    - npx vsce package --no-dependencies --target "$VSCE_TARGET" --out "skema-v${RELEASE_VERSION:-0.0.0-dev}-${VSCE_TARGET}.vsix"
   artifacts:
     paths:
       - "*.vsix"
@@ -153,73 +155,31 @@ package:
 package-neutral:
   stage: package
   cache: *npm_cache
+  needs:
+    - job: version
+      artifacts: true
+      optional: true
   rules:
-    - if: $CI_COMMIT_TAG
+    - *skip_with_adopt_input
+    - when: on_success
   script:
     - npm ci --prefer-offline --no-audit --fund=false
     - npm run build
-    - npx vsce package --no-dependencies --out "skemavscode-universal.vsix"
+    - npx vsce package --no-dependencies --out "skema-v${RELEASE_VERSION:-0.0.0-dev}.vsix"
   artifacts:
     paths:
       - "*.vsix"
     expire_in: 1 month
 
-# --------------------------------------------------------------------------
-# publish (tags only)
-# --------------------------------------------------------------------------
-
-# Uploads every VSIX built above to this project's own generic package
-# registry, the same way skema itself publishes skema-lsp/skema-wasm. Job
-# artifacts (see `package`/`package-neutral`) expire in a month and exist for
-# quick access from the pipeline page; the registry copy is the durable one,
-# with a stable URL of the form
-#   .../api/v4/projects/<id>/packages/generic/skemavscode/<tag>/<file>.vsix
-# Just uploads pre-built artifacts, no Node needed.
-publish-generic-package:
-  stage: publish
-  image: curlimages/curl:latest
-  # `package` runs as a matrix (linux-x64, win32-x64); naming just the job
-  # pulls artifacts from every instance of it, not one arbitrarily chosen one.
+# The component's own `release` job globs `asset_globs` from its own job's
+# workspace, so it needs the VSIXes downloaded into it - GitLab merges a
+# same-named job key by key, so this overrides only `needs`, keeping the
+# component's image/stage/rules/script/artifacts as they are.
+release:
   needs:
+    - job: version
+      artifacts: true
     - job: package
       artifacts: true
     - job: package-neutral
       artifacts: true
-  rules:
-    - if: $CI_COMMIT_TAG
-  script:
-    - |
-      for f in *.vsix; do
-        curl --fail --header "JOB-TOKEN: ${CI_JOB_TOKEN}" --upload-file "$f" \
-          "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/skemavscode/${CI_COMMIT_TAG}/${f}"
-      done
-
-# --------------------------------------------------------------------------
-# release (main only: a push, "Run pipeline", or an upstream input)
-# --------------------------------------------------------------------------
-
-# Adopts whatever skema-lib handed down, then derives this repo's own next
-# version from conventional commits (git-cliff) and pushes the tag. The tag
-# is the point — it starts the `package` jobs above, which are the ones that
-# build a VSIX. Nothing is packaged here.
-#
-# resource_group serializes this against itself: two releases racing would
-# both compute the same "next" version from the same last tag.
-release:
-  stage: release
-  resource_group: release
-  interruptible: false
-  variables:
-    GIT_STRATEGY: clone
-    GIT_DEPTH: 0
-    SKEMA_LIB_VERSION: "$[[ inputs.skema_lib_version ]]"
-    SKEMA_LANG_VERSION: "$[[ inputs.skema_lang_version ]]"
-  rules:
-    - if: $CI_COMMIT_TAG
-      when: never
-    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-    - if: $CI_PIPELINE_SOURCE == "web" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && ("$[[ inputs.skema_lib_version ]]" != "" || "$[[ inputs.skema_lang_version ]]" != "")'
-  before_script: *install_git_cliff
-  script:
-    - scripts/release.sh

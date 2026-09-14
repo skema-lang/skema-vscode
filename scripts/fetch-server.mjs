@@ -6,7 +6,8 @@
  * on a tag, and pulled in at packaging time - so this repo carries no
  * megabyte-sized blob per platform. Its version is derived from the
  * `@skema/model` dependency pin rather than stored separately: both come from
- * the same skema-lang release, and `adopt-release.mjs` is what moves that pin.
+ * the same skema-lang release, and the release pipeline's `adopt` job is what
+ * moves that pin - an exact `X.Y.Z`, or an `X.Y.Z-rc.N` release candidate.
  *
  * One binary per VSIX, because a VSIX is per platform: `vsce package
  * --target linux-x64` produces an artifact that only that platform ever
@@ -41,10 +42,10 @@ if (!version) {
     console.error("No @skema/model dependency to derive the server version from. Set SKEMA_SERVER_VERSION.");
     process.exit(1);
   }
-  if (!/^\d+\.\d+\.\d+$/.test(modelPin)) {
+  if (!/^\d+\.\d+\.\d+(-rc\.\d+)?$/.test(modelPin)) {
     console.error(
       `@skema/model is pinned to a range (${modelPin}), not an exact version - the server version can't be\n` +
-        "derived from it. Run adopt-release.mjs to pin it exactly, or set SKEMA_SERVER_VERSION.",
+        "derived from it. Adoption pins it exactly (an X.Y.Z or an X.Y.Z-rc.N), or set SKEMA_SERVER_VERSION.",
     );
     process.exit(1);
   }
