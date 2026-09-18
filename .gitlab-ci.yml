@@ -37,6 +37,10 @@ spec:
       default: ""
       description: "skema-lang release to adopt (@skema/model), e.g. v0.2.3"
       regex: '^(v\d+\.\d+\.\d+(-rc\.\d+)?)?$'
+    trigger_downstream:
+      type: boolean
+      default: true
+      description: "Forwarded by every hand-down, so this repo has to accept it; nothing is handed on from here"
     republish_version:
       type: string
       default: ""
@@ -56,6 +60,7 @@ include:
         [{"label":"skema-lib","version":"$[[ inputs.skema_lib_version ]]","packages":["@skema/collab-protocol","@skema/diagram","@skema/docs"]},
          {"label":"skema","version":"$[[ inputs.skema_lang_version ]]","packages":["@skema/model"]}]
       verify_command: "npm ci && npm run typecheck && npm test && npm run build"
+      trigger_downstream: $[[ inputs.trigger_downstream ]]
       republish_version: $[[ inputs.republish_version ]]
       adopt_stage: check
 
