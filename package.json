@@ -2,7 +2,7 @@
   "name": "skemavscode",
   "displayName": "skema",
   "description": "Editing support and a live ER diagram for the skema modelling DSL",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "private": true,
   "license": "MIT",
   "publisher": "skema",
