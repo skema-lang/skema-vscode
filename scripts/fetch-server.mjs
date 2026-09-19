@@ -85,10 +85,10 @@ if (!triple) {
 }
 
 const asset = `skema-lsp-${triple}${vscodeTarget === "win32-x64" ? ".exe" : ""}`;
-const url = `${host}/api/v4/projects/${encodeURIComponent(project)}/packages/generic/skema/${version}/${asset}`;
+const packageUrl = (packageVersion) =>
+  `${host}/api/v4/projects/${encodeURIComponent(project)}/packages/generic/skema/${packageVersion}/${asset}`;
 
 console.log(`Fetching ${asset} (${version}) for ${vscodeTarget}`);
-console.log(`  ${url}`);
 
 // A private project needs a token; a public one needs none. Both are normal,
 // so the header is added only when there is something to add.
@@ -96,7 +96,14 @@ const headers = {};
 if (process.env.CI_JOB_TOKEN) headers["JOB-TOKEN"] = process.env.CI_JOB_TOKEN;
 else if (process.env.GITLAB_TOKEN) headers["PRIVATE-TOKEN"] = process.env.GITLAB_TOKEN;
 
-const response = await fetch(url, { headers });
+// skema-ci publishes under the bare version; releases before 0.3.0 used the tag.
+const bareVersion = version.replace(/^v/, "");
+let response;
+for (const packageVersion of [bareVersion, `v${bareVersion}`]) {
+  console.log(`  ${packageUrl(packageVersion)}`);
+  response = await fetch(packageUrl(packageVersion), { headers });
+  if (response.status !== 404) break;
+}
 if (!response.ok) {
   console.error(`  ${response.status} ${response.statusText}`);
   if (response.status === 404) {
