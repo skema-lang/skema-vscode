@@ -58,6 +58,10 @@
         "title": "skema: Start collaboration session"
       },
       {
+        "command": "skema.collab.invite",
+        "title": "skema: Invite someone to the collaboration session"
+      },
+      {
         "command": "skema.collab.completeSession",
         "title": "skema: Complete collaboration session"
       },
@@ -81,6 +85,12 @@
           "command": "skema.showDocumentation",
           "when": "resourceLangId == skema",
           "group": "navigation"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "skema.collab.invite",
+          "when": "skema.collab.hosting"
         }
       ]
     },

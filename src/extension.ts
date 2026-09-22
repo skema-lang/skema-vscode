@@ -24,7 +24,15 @@ import {
 
 import { MODEL_CHANGED_NOTIFICATION } from "../shared/protocol";
 import { loadIdentity } from "./collab/identity";
-import { completeHosting, endSession, isActive, joinSession, startHosting } from "./collab/session";
+import {
+  completeHosting,
+  createInvite,
+  endSession,
+  isActive,
+  joinSession,
+  mode,
+  startHosting,
+} from "./collab/session";
 import { DiagramPanel, readPreferences } from "./diagram/panel";
 import { DocumentationProvider, renderDocumentation } from "./docs/provider";
 import { ServerNotFound, resolveServer } from "./server";
@@ -35,6 +43,7 @@ let output: vscode.OutputChannel;
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   output = vscode.window.createOutputChannel("skema");
   context.subscriptions.push(output);
+  void vscode.commands.executeCommand("setContext", "skema.collab.hosting", false);
 
   DocumentationProvider.register(context);
 
@@ -59,6 +68,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       await start(context);
     }),
     vscode.commands.registerCommand("skema.collab.startSession", () => startCollabSession(context)),
+    vscode.commands.registerCommand("skema.collab.invite", () => inviteToCollabSession()),
     vscode.commands.registerCommand("skema.collab.completeSession", () => completeCollabSession()),
     vscode.commands.registerCommand("skema.collab.joinSession", () => joinCollabSession(context)),
     vscode.commands.registerCommand("skema.collab.endSession", () => endCollabSession()),
@@ -170,12 +180,11 @@ async function exportDocumentation(): Promise<void> {
 
 /**
  * Starts hosting: opens the diagram (a session is only visible through its
- * presence on the canvas) and hands out an invite for one guest to answer.
- *
- * Manual, hand-carried handshake only - see `collab/link.ts` for why there
- * is no broker/auto-link path here. `showInputBox`/the clipboard stand in
- * for `skema-editor`'s `CollabPanel`: enough for a first version, not a
- * full panel.
+ * presence on the canvas) and hands out an invite - a reusable one through
+ * the public broker, or a one-time manual offer if the broker cannot be
+ * reached (`session.ts`'s `Session.start`). `showInputBox`/the clipboard
+ * stand in for `skema-editor`'s `CollabPanel`: enough for a first version,
+ * not a full panel.
  */
 async function startCollabSession(context: vscode.ExtensionContext): Promise<void> {
   if (!client) {
@@ -191,14 +200,36 @@ async function startCollabSession(context: vscode.ExtensionContext): Promise<voi
     const invite = await startHosting(loadIdentity(context.globalState));
     await panel.beginCollabSync("host");
     await vscode.env.clipboard.writeText(invite);
+    void vscode.commands.executeCommand("setContext", "skema.collab.hosting", true);
     void vscode.window.showInformationMessage(
-      "Collaboration invite copied to clipboard - send it to whoever is joining. " +
-        'Once they answer, run "skema: Complete collaboration session" with what they send back.',
+      mode() === "auto"
+        ? 'Collaboration invite copied to clipboard - anyone who opens it can join. Run "skema: Invite someone to the collaboration session" for another copy.'
+        : "Collaboration invite copied to clipboard - send it to whoever is joining. " +
+            'Once they answer, run "skema: Complete collaboration session" with what they send back.',
     );
   } catch (error) {
     void vscode.window.showErrorMessage(
       `Could not start a collaboration session: ${String(error)}`,
     );
+  }
+}
+
+/** Hands out another way to join the session already being hosted: the same
+ *  reusable invitation again in auto mode, one more one-time offer in
+ *  manual mode. Visible only while hosting (`skema.collab.hosting`,
+ *  `package.json`'s `commandPalette` `when`). */
+async function inviteToCollabSession(): Promise<void> {
+  try {
+    const invite = await createInvite();
+    await vscode.env.clipboard.writeText(invite);
+    void vscode.window.showInformationMessage(
+      mode() === "auto"
+        ? "Invitation copied to clipboard - anyone who opens it can join."
+        : "Invite copied to clipboard - send it to whoever is joining. " +
+            'Once they answer, run "skema: Complete collaboration session" with what they send back.',
+    );
+  } catch (error) {
+    void vscode.window.showErrorMessage(`Could not create an invitation: ${String(error)}`);
   }
 }
 
@@ -216,8 +247,10 @@ async function completeCollabSession(): Promise<void> {
   }
 }
 
-/** Joins a session from an invite pasted in, and hands back the answer to
- *  send to whoever is hosting. */
+/** Joins a session from an invite pasted in. A manual invite needs an
+ *  answer sent back; an auto invite needs nothing more - joining through the
+ *  broker was the whole action, so `joinSession` returns `undefined` and
+ *  there is nothing to ask the user to send. */
 async function joinCollabSession(context: vscode.ExtensionContext): Promise<void> {
   if (!client) {
     void vscode.window.showWarningMessage("The skema language server is not running.");
@@ -236,6 +269,10 @@ async function joinCollabSession(context: vscode.ExtensionContext): Promise<void
   try {
     const answer = await joinSession(loadIdentity(context.globalState), invite);
     await panel.beginCollabSync("guest");
+    if (!answer) {
+      void vscode.window.showInformationMessage("Joined the collaboration session.");
+      return;
+    }
     await vscode.env.clipboard.writeText(answer);
     void vscode.window.showInformationMessage(
       "Answer copied to clipboard - send it back to whoever invited you.",
@@ -249,5 +286,6 @@ function endCollabSession(): void {
   if (!isActive()) return;
   DiagramPanel.endCollabSync();
   endSession();
+  void vscode.commands.executeCommand("setContext", "skema.collab.hosting", false);
   void vscode.window.showInformationMessage("Collaboration session ended.");
 }
