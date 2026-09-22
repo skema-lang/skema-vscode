@@ -1,0 +1,45 @@
+{
+  "source": "Transcribed from peerjs@1.5.5 dist/bundler.mjs: Negotiator._makeOffer (data connection; metadata undefined, so JSON.stringify drops it), Negotiator._makeAnswer, Negotiator._setupListeners onicecandidate; Socket.send serializes {type, payload, dst}. Placeholders in <angle brackets> stand for per-run values. The candidate omits usernameFragment, which a browser's RTCIceCandidate.toJSON adds and PeerJS forwards untouched.",
+  "docOffer": {
+    "type": "OFFER",
+    "payload": {
+      "sdp": { "type": "offer", "sdp": "<sdp>" },
+      "type": "data",
+      "connectionId": "<connectionId>",
+      "label": "skema-doc",
+      "reliable": true,
+      "serialization": "raw"
+    },
+    "dst": "<host>"
+  },
+  "awarenessOffer": {
+    "type": "OFFER",
+    "payload": {
+      "sdp": { "type": "offer", "sdp": "<sdp>" },
+      "type": "data",
+      "connectionId": "<connectionId>",
+      "label": "skema-awareness",
+      "reliable": false,
+      "serialization": "raw"
+    },
+    "dst": "<host>"
+  },
+  "answer": {
+    "type": "ANSWER",
+    "payload": {
+      "sdp": { "type": "answer", "sdp": "<sdp>" },
+      "type": "data",
+      "connectionId": "<connectionId>"
+    },
+    "dst": "<guest>"
+  },
+  "candidate": {
+    "type": "CANDIDATE",
+    "payload": {
+      "candidate": { "candidate": "<candidate>", "sdpMid": "<sdpMid>", "sdpMLineIndex": 0 },
+      "type": "data",
+      "connectionId": "<connectionId>"
+    },
+    "dst": "<peer>"
+  }
+}

@@ -30,7 +30,8 @@ const extension = {
   platform: "node",
   format: "cjs",
   target: "node20",
-  external: ["vscode"],
+  // Optional native speedups `ws` tries to require; it falls back to pure JS.
+  external: ["vscode", "bufferutil", "utf-8-validate"],
 };
 
 /** @type {import("esbuild").BuildOptions} */
@@ -63,6 +64,8 @@ const tests = {
     "test/textSync.test.ts",
     "test/projectPaths.test.ts",
     "test/projectSync.test.ts",
+    "test/broker.test.ts",
+    "test/autoLink.test.ts",
   ],
   outdir: "dist/test",
   outExtension: { ".js": ".mjs" },
@@ -74,7 +77,8 @@ const tests = {
   alias: { vscode: "./test/vscode-stub.ts" },
   // Read at runtime, relative to the bundle - so it stays a fixture rather
   // than becoming part of the build.
-  external: ["node:*"],
+  // werift and ws `require()` Node built-ins, which an ESM bundle cannot.
+  external: ["node:*", "werift", "ws"],
 };
 
 if (process.argv.includes("--tests")) {
