@@ -24,6 +24,7 @@ import {
 
 import { MODEL_CHANGED_NOTIFICATION } from "../shared/protocol";
 import { editorInviteUrl } from "./collab/editorLink";
+import { runEndOfSession } from "./collab/endSession";
 import { loadIdentity } from "./collab/identity";
 import {
   confirmed,
@@ -83,6 +84,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand("skema.collab.completeSession", () => completeCollabSession()),
     vscode.commands.registerCommand("skema.collab.joinSession", () => joinCollabSession(context)),
     vscode.commands.registerCommand("skema.collab.endSession", () => endCollabSession()),
+    // Closing the panel ends any session it is showing exactly like the
+    // command above does (task 108) - the panel has no reference to the
+    // context key, message or "Open folder" offer that belong to it alone.
+    DiagramPanel.onDidDispose(() => endCollabSession()),
     // A changed server path means a different server; a changed diagram
     // option has to reach the open panel.
     vscode.workspace.onDidChangeConfiguration(async (event) => {
@@ -408,15 +413,20 @@ async function runJoin(
 }
 
 function endCollabSession(): void {
-  if (!isActive()) return;
-  DiagramPanel.endCollabSync();
-  endSession();
-  void vscode.commands.executeCommand("setContext", "skema.collab.hosting", false);
-
-  const folder = unopenedJoinFolder;
-  unopenedJoinFolder = undefined;
-  if (folder) void offerToOpenFolder(folder);
-  else void vscode.window.showInformationMessage("Collaboration session ended.");
+  runEndOfSession<vscode.Uri>({
+    isSessionActive: isActive,
+    teardownCollabSync: () => DiagramPanel.endCollabSync(),
+    endSession,
+    setHostingContext: (hosting) =>
+      void vscode.commands.executeCommand("setContext", "skema.collab.hosting", hosting),
+    takeUnopenedJoinFolder: () => {
+      const folder = unopenedJoinFolder;
+      unopenedJoinFolder = undefined;
+      return folder;
+    },
+    showSessionEnded: () => void vscode.window.showInformationMessage("Collaboration session ended."),
+    offerToOpenFolder,
+  });
 }
 
 const OPEN_FOLDER = "Open folder";

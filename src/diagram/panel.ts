@@ -26,7 +26,6 @@ import { readHostProject, writeProjectToDisk } from "../collab/projectHost";
 import { adoptProject, seedProject } from "../collab/projectSync";
 import {
   currentDoc,
-  endSession,
   publishDrag,
   role,
   setListener,
@@ -37,6 +36,11 @@ import { TextBinding } from "../collab/textBinding";
 
 export class DiagramPanel implements Listener {
   private static current: DiagramPanel | undefined;
+  private static readonly disposeEmitter = new vscode.EventEmitter<void>();
+  /** Fires once a panel has fully closed - the one signal `extension.ts`
+   *  needs to run the same end-of-session path the command runs, whichever
+   *  of the two closed it (task 108). */
+  static readonly onDidDispose = DiagramPanel.disposeEmitter.event;
 
   private readonly disposables: vscode.Disposable[] = [];
   /** The file the model was last asked about - kept so a refresh triggered
@@ -138,13 +142,14 @@ export class DiagramPanel implements Listener {
 
   private dispose(): void {
     DiagramPanel.current = undefined;
-    // Presence has no UI surface outside this panel, and this is the only
-    // registered `Listener` - closing it without ending the session would
-    // leave a WebRTC link running with nowhere to show what it reports.
-    endSession();
     this.teardownCollabSync();
     for (const disposable of this.disposables.splice(0)) disposable.dispose();
     this.panel.dispose();
+    // Presence has no UI surface outside this panel, and this is the only
+    // registered `Listener` - closing it without ending the session would
+    // leave a WebRTC link running with nowhere to show what it reports.
+    // `extension.ts` owns what ending it looks like from here (task 108).
+    DiagramPanel.disposeEmitter.fire();
   }
 
   /**
