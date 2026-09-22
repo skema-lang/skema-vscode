@@ -67,6 +67,7 @@ const tests = {
     "test/broker.test.ts",
     "test/autoLink.test.ts",
     "test/session.test.ts",
+    "test/editorLink.test.ts",
   ],
   outdir: "dist/test",
   outExtension: { ".js": ".mjs" },

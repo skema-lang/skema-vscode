@@ -134,6 +134,13 @@
           "default": 16,
           "minimum": 4,
           "description": "Grid spacing used when snapping is on."
+        },
+        "skema.collab.editorUrl": {
+          "type": "string",
+          "format": "uri",
+          "default": "https://skema-language.gitlab.io/skema-editor/",
+          "scope": "application",
+          "markdownDescription": "The `skema-editor` instance collaboration invites and answers are linked to. Application-scoped so a workspace cannot redirect a session-granting link to another site."
         }
       }
     },

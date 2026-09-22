@@ -23,6 +23,7 @@ import {
 } from "vscode-languageclient/node";
 
 import { MODEL_CHANGED_NOTIFICATION } from "../shared/protocol";
+import { editorInviteUrl } from "./collab/editorLink";
 import { loadIdentity } from "./collab/identity";
 import {
   completeHosting,
@@ -178,6 +179,30 @@ async function exportDocumentation(): Promise<void> {
   void vscode.window.showInformationMessage(`Exported skema documentation to ${target.fsPath}`);
 }
 
+const OPEN_IN_BROWSER = "Open in browser";
+
+/** How to use a copied invite or answer link, appended to the "copied"
+ *  message - shared because `startCollabSession` and `inviteToCollabSession`
+ *  both hand out the host's link. */
+const HOW_TO_JOIN =
+  'It opens directly in a browser; from VS Code, open it and choose "Open in VS Code", ' +
+  'or paste it into "skema: Join collaboration session".';
+
+/** Wraps a bare token from `session.ts` as a link `skema-editor` can open,
+ *  per `skema.collab.editorUrl`. */
+function editorLink(token: string): string {
+  const editorUrl = vscode.workspace.getConfiguration("skema.collab").get<string>("editorUrl", "");
+  return editorInviteUrl(editorUrl, token);
+}
+
+/** The host's "copied" message: an "Open in browser" action alongside the
+ *  usual dismiss, since the clipboard now holds a link rather than a bare
+ *  token. */
+async function showHostLinkCopied(message: string, link: string): Promise<void> {
+  const selection = await vscode.window.showInformationMessage(message, OPEN_IN_BROWSER);
+  if (selection === OPEN_IN_BROWSER) void vscode.env.openExternal(vscode.Uri.parse(link));
+}
+
 /**
  * Starts hosting: opens the diagram (a session is only visible through its
  * presence on the canvas) and hands out an invite - a reusable one through
@@ -198,14 +223,16 @@ async function startCollabSession(context: vscode.ExtensionContext): Promise<voi
   const panel = DiagramPanel.show(context, client, vscode.window.activeTextEditor?.document.uri);
   try {
     const invite = await startHosting(loadIdentity(context.globalState));
+    const link = editorLink(invite);
     await panel.beginCollabSync("host");
-    await vscode.env.clipboard.writeText(invite);
+    await vscode.env.clipboard.writeText(link);
     void vscode.commands.executeCommand("setContext", "skema.collab.hosting", true);
-    void vscode.window.showInformationMessage(
+    void showHostLinkCopied(
       mode() === "auto"
-        ? 'Collaboration invite copied to clipboard - anyone who opens it can join. Run "skema: Invite someone to the collaboration session" for another copy.'
-        : "Collaboration invite copied to clipboard - send it to whoever is joining. " +
+        ? `Collaboration invite copied to clipboard as a link. ${HOW_TO_JOIN} Run "skema: Invite someone to the collaboration session" for another copy.`
+        : `Collaboration invite copied to clipboard as a link - send it to whoever is joining. ${HOW_TO_JOIN} ` +
             'Once they answer, run "skema: Complete collaboration session" with what they send back.',
+      link,
     );
   } catch (error) {
     void vscode.window.showErrorMessage(
@@ -221,12 +248,14 @@ async function startCollabSession(context: vscode.ExtensionContext): Promise<voi
 async function inviteToCollabSession(): Promise<void> {
   try {
     const invite = await createInvite();
-    await vscode.env.clipboard.writeText(invite);
-    void vscode.window.showInformationMessage(
+    const link = editorLink(invite);
+    await vscode.env.clipboard.writeText(link);
+    void showHostLinkCopied(
       mode() === "auto"
-        ? "Invitation copied to clipboard - anyone who opens it can join."
-        : "Invite copied to clipboard - send it to whoever is joining. " +
+        ? `Invitation copied to clipboard as a link. ${HOW_TO_JOIN}`
+        : `Invite copied to clipboard as a link - send it to whoever is joining. ${HOW_TO_JOIN} ` +
             'Once they answer, run "skema: Complete collaboration session" with what they send back.',
+      link,
     );
   } catch (error) {
     void vscode.window.showErrorMessage(`Could not create an invitation: ${String(error)}`);
@@ -273,9 +302,9 @@ async function joinCollabSession(context: vscode.ExtensionContext): Promise<void
       void vscode.window.showInformationMessage("Joined the collaboration session.");
       return;
     }
-    await vscode.env.clipboard.writeText(answer);
+    await vscode.env.clipboard.writeText(editorLink(answer));
     void vscode.window.showInformationMessage(
-      "Answer copied to clipboard - send it back to whoever invited you.",
+      "Answer copied to clipboard as a link - send it back to whoever invited you.",
     );
   } catch (error) {
     void vscode.window.showErrorMessage(`Could not join the session: ${String(error)}`);
