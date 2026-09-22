@@ -19,7 +19,8 @@
   ],
   "main": "./dist/extension.js",
   "activationEvents": [
-    "workspaceContains:**/*.skema"
+    "workspaceContains:**/*.skema",
+    "onUri"
   ],
   "contributes": {
     "languages": [

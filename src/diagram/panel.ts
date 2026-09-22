@@ -53,6 +53,10 @@ export class DiagramPanel implements Listener {
    *  already open when a session starts. Set once seeding (host) or
    *  adoption (guest) knows it, cleared in `teardownCollabSync`. */
   private collabRootUri: string | undefined;
+  /** Where a guest's adopted project is written - the folder the join flow
+   *  confirmed with the user (`extension.ts`), never read from
+   *  `workspaceFolders` here. Unused by a host. */
+  private guestTargetFolder: vscode.Uri | undefined;
 
   static show(
     context: vscode.ExtensionContext,
@@ -153,13 +157,20 @@ export class DiagramPanel implements Listener {
    * seeding failure (no elected root, the server not answering) degrades to
    * presence-only rather than aborting the session - task 19's diagram
    * sharing must keep working even when this cannot.
+   *
+   * `targetFolder` is where a guest's adopted project will be written -
+   * required for that role, since the confirmed target is the whole point
+   * of the join flow that calls this (`extension.ts`); unused by a host.
    */
-  async beginCollabSync(sessionRole: SessionRole): Promise<void> {
+  async beginCollabSync(sessionRole: SessionRole, targetFolder?: vscode.Uri): Promise<void> {
     const doc = currentDoc();
     if (!doc) return;
     this.textBinding = new TextBinding(doc, () => this.collabRootUri);
     this.showUndoWarning();
-    if (sessionRole !== "host") return;
+    if (sessionRole !== "host") {
+      this.guestTargetFolder = targetFolder;
+      return;
+    }
 
     try {
       const subject = this.subject ?? activeSkemaFile();
@@ -193,20 +204,20 @@ export class DiagramPanel implements Listener {
 
   private async adoptProjectToDisk(): Promise<void> {
     const doc = currentDoc();
-    const folder = vscode.workspace.workspaceFolders?.[0];
+    const folder = this.guestTargetFolder;
     if (!doc) return;
     if (!folder) {
       void vscode.window.showWarningMessage(
-        "Open a folder to receive the shared project's files - joining without one shares diagram presence only.",
+        "No target folder was confirmed for this session - it shares diagram presence only.",
       );
       return;
     }
     try {
       const adopted = adoptProject(doc);
       if (adopted.files.length === 0) return;
-      await writeProjectToDisk(folder.uri, adopted.files);
+      await writeProjectToDisk(folder, adopted.files);
       if (adopted.rootPath) {
-        const rootUri = vscode.Uri.joinPath(folder.uri, ...adopted.rootPath.split("/"));
+        const rootUri = vscode.Uri.joinPath(folder, ...adopted.rootPath.split("/"));
         this.collabRootUri = rootUri.toString();
         this.textBinding?.refresh();
         const document = await vscode.workspace.openTextDocument(rootUri);
@@ -230,6 +241,7 @@ export class DiagramPanel implements Listener {
     this.undoWarning?.dispose();
     this.undoWarning = undefined;
     this.collabRootUri = undefined;
+    this.guestTargetFolder = undefined;
   }
 
   private showUndoWarning(): void {

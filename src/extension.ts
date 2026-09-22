@@ -26,6 +26,13 @@ import { MODEL_CHANGED_NOTIFICATION } from "../shared/protocol";
 import { editorInviteUrl } from "./collab/editorLink";
 import { loadIdentity } from "./collab/identity";
 import {
+  confirmed,
+  decideFolder,
+  joinConfirmation,
+  parseJoinInvite,
+  type FolderDecision,
+} from "./collab/joinFlow";
+import {
   completeHosting,
   createInvite,
   endSession,
@@ -40,6 +47,9 @@ import { ServerNotFound, resolveServer } from "./server";
 
 let client: LanguageClient | undefined;
 let output: vscode.OutputChannel;
+/** Set once a join wrote into a folder that was not already open, so
+ *  `endCollabSession` can offer to open it now that reloading is harmless. */
+let unopenedJoinFolder: vscode.Uri | undefined;
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   output = vscode.window.createOutputChannel("skema");
@@ -86,7 +96,30 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }),
   );
 
-  await start(context);
+  // Registered before the server start is awaited: an empty window activates
+  // on "onUri" alone, and the handler waits out `starting` itself rather
+  // than assuming the client is already there.
+  const starting = start(context);
+  context.subscriptions.push(
+    vscode.window.registerUriHandler({
+      handleUri: (uri) => void handleUri(context, uri, starting),
+    }),
+  );
+  await starting;
+}
+
+/** Only `/join` is recognized; everything else this extension might one day
+ *  route through `vscode://` is out of scope for now. */
+async function handleUri(
+  context: vscode.ExtensionContext,
+  uri: vscode.Uri,
+  starting: Promise<void>,
+): Promise<void> {
+  if (uri.path !== "/join") return;
+  await starting;
+  // `start()` already reported why, if the server never came up.
+  if (!client) return;
+  await runJoin(context, client, uri.toString());
 }
 
 export async function deactivate(): Promise<void> {
@@ -276,10 +309,8 @@ async function completeCollabSession(): Promise<void> {
   }
 }
 
-/** Joins a session from an invite pasted in. A manual invite needs an
- *  answer sent back; an auto invite needs nothing more - joining through the
- *  broker was the whole action, so `joinSession` returns `undefined` and
- *  there is nothing to ask the user to send. */
+/** Joins a session from an invite pasted in - the command palette's way
+ *  into the same flow the `vscode://.../join` URI uses (`runJoin`). */
 async function joinCollabSession(context: vscode.ExtensionContext): Promise<void> {
   if (!client) {
     void vscode.window.showWarningMessage("The skema language server is not running.");
@@ -294,10 +325,75 @@ async function joinCollabSession(context: vscode.ExtensionContext): Promise<void
     ignoreFocusOut: true,
   });
   if (!invite) return;
-  const panel = DiagramPanel.show(context, client, vscode.window.activeTextEditor?.document.uri);
+  await runJoin(context, client, invite);
+}
+
+interface JoinTarget {
+  uri: vscode.Uri;
+  /** Whether this was already an open workspace folder - if not, the folder
+   *  is written into but never opened as a workspace mid-session (that
+   *  reloads the window and would end the session just confirmed). */
+  workspaceAlreadyOpen: boolean;
+}
+
+/** The confirmed decision's `"use"` folder, or a picker the user can
+ *  cancel - run only after the modal above, so cancelling either one is
+ *  the same as never having been asked. */
+async function resolveJoinTarget(
+  decision: FolderDecision,
+  workspaceFolders: readonly vscode.WorkspaceFolder[],
+): Promise<JoinTarget | undefined> {
+  if (decision.kind === "use" && workspaceFolders[0]) {
+    return { uri: workspaceFolders[0].uri, workspaceAlreadyOpen: true };
+  }
+
+  const picked = await vscode.window.showOpenDialog({
+    canSelectFolders: true,
+    canSelectFiles: false,
+    canSelectMany: false,
+    openLabel: "Join here",
+  });
+  const folder = picked?.[0];
+  return folder ? { uri: folder, workspaceAlreadyOpen: false } : undefined;
+}
+
+/**
+ * The one join path shared by the `vscode://.../join` URI and
+ * `skema.collab.joinSession`: decode, confirm in a mandatory modal, resolve
+ * the target folder, then join and start co-editing as a guest. Nothing
+ * here writes a file before "Join" is clicked - any web page can fire the
+ * URI, and joining is what puts the host's project on disk.
+ */
+async function runJoin(
+  context: vscode.ExtensionContext,
+  activeClient: LanguageClient,
+  rawText: string,
+): Promise<void> {
+  const invite = parseJoinInvite(rawText);
+  if (!invite) {
+    void vscode.window.showErrorMessage("That does not look like a valid collaboration invite.");
+    return;
+  }
+  if (isActive()) {
+    void vscode.window.showWarningMessage("A collaboration session is already active.");
+    return;
+  }
+
+  const workspaceFolders = vscode.workspace.workspaceFolders ?? [];
+  const decision = decideFolder(workspaceFolders.map((folder) => folder.uri.fsPath));
+
+  const { message, detail } = joinConfirmation(invite.name, decision);
+  const choice = await vscode.window.showWarningMessage(message, { modal: true, detail }, "Join");
+  if (!confirmed(choice)) return;
+
+  const target = await resolveJoinTarget(decision, workspaceFolders);
+  if (!target) return;
+
+  const panel = DiagramPanel.show(context, activeClient, vscode.window.activeTextEditor?.document.uri);
   try {
-    const answer = await joinSession(loadIdentity(context.globalState), invite);
-    await panel.beginCollabSync("guest");
+    const answer = await joinSession(loadIdentity(context.globalState), rawText);
+    await panel.beginCollabSync("guest", target.uri);
+    if (!target.workspaceAlreadyOpen) unopenedJoinFolder = target.uri;
     if (!answer) {
       void vscode.window.showInformationMessage("Joined the collaboration session.");
       return;
@@ -316,5 +412,21 @@ function endCollabSession(): void {
   DiagramPanel.endCollabSync();
   endSession();
   void vscode.commands.executeCommand("setContext", "skema.collab.hosting", false);
-  void vscode.window.showInformationMessage("Collaboration session ended.");
+
+  const folder = unopenedJoinFolder;
+  unopenedJoinFolder = undefined;
+  if (folder) void offerToOpenFolder(folder);
+  else void vscode.window.showInformationMessage("Collaboration session ended.");
+}
+
+const OPEN_FOLDER = "Open folder";
+
+/** Reloading the window is harmless now that the session it would have
+ *  ended has already ended. */
+async function offerToOpenFolder(folder: vscode.Uri): Promise<void> {
+  const choice = await vscode.window.showInformationMessage(
+    "Collaboration session ended. The shared project's files are on disk.",
+    OPEN_FOLDER,
+  );
+  if (choice === OPEN_FOLDER) void vscode.commands.executeCommand("vscode.openFolder", folder);
 }
