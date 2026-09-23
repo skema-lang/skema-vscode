@@ -51,11 +51,9 @@ export async function readHostProject(
 }
 
 /**
- * Guest side: writes an adopted project to real files under the open
- * workspace folder, mirroring `skema-editor`'s own guest-side `adopt()`
- * (`skema-editor/src/collab/projectBinding.ts`) - unconditional and without
- * a prompt, the same accepted risk recorded for that side
- * (brain/decisions.md, "Collaboration across hosts").
+ * Guest side: writes an adopted project to real files under the confirmed
+ * target folder (`joinFlow.ts`/`extension.ts`), mirroring `skema-editor`'s
+ * own guest-side `adopt()` (`skema-editor/src/collab/projectBinding.ts`).
  *
  * A one-time bootstrap, not an edit a user would want to undo, so this
  * writes directly rather than through a `WorkspaceEdit` - `writeLayout` in
