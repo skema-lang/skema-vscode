@@ -19,7 +19,8 @@
   ],
   "main": "./dist/extension.js",
   "activationEvents": [
-    "workspaceContains:**/*.skema"
+    "workspaceContains:**/*.skema",
+    "onUri"
   ],
   "contributes": {
     "languages": [
@@ -58,6 +59,10 @@
         "title": "skema: Start collaboration session"
       },
       {
+        "command": "skema.collab.invite",
+        "title": "skema: Invite someone to the collaboration session"
+      },
+      {
         "command": "skema.collab.completeSession",
         "title": "skema: Complete collaboration session"
       },
@@ -81,6 +86,12 @@
           "command": "skema.showDocumentation",
           "when": "resourceLangId == skema",
           "group": "navigation"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "skema.collab.invite",
+          "when": "skema.collab.hosting"
         }
       ]
     },
@@ -124,6 +135,13 @@
           "default": 16,
           "minimum": 4,
           "description": "Grid spacing used when snapping is on."
+        },
+        "skema.collab.editorUrl": {
+          "type": "string",
+          "format": "uri",
+          "default": "https://skema-language.gitlab.io/skema-editor/",
+          "scope": "application",
+          "markdownDescription": "The `skema-editor` instance collaboration invites and answers are linked to. Application-scoped so a workspace cannot redirect a session-granting link to another site."
         }
       }
     },

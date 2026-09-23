@@ -26,7 +26,6 @@ import { readHostProject, writeProjectToDisk } from "../collab/projectHost";
 import { adoptProject, seedProject } from "../collab/projectSync";
 import {
   currentDoc,
-  endSession,
   publishDrag,
   role,
   setListener,
@@ -37,6 +36,11 @@ import { TextBinding } from "../collab/textBinding";
 
 export class DiagramPanel implements Listener {
   private static current: DiagramPanel | undefined;
+  private static readonly disposeEmitter = new vscode.EventEmitter<void>();
+  /** Fires once a panel has fully closed - the one signal `extension.ts`
+   *  needs to run the same end-of-session path the command runs, whichever
+   *  of the two closed it (task 108). */
+  static readonly onDidDispose = DiagramPanel.disposeEmitter.event;
 
   private readonly disposables: vscode.Disposable[] = [];
   /** The file the model was last asked about - kept so a refresh triggered
@@ -53,6 +57,10 @@ export class DiagramPanel implements Listener {
    *  already open when a session starts. Set once seeding (host) or
    *  adoption (guest) knows it, cleared in `teardownCollabSync`. */
   private collabRootUri: string | undefined;
+  /** Where a guest's adopted project is written - the folder the join flow
+   *  confirmed with the user (`extension.ts`), never read from
+   *  `workspaceFolders` here. Unused by a host. */
+  private guestTargetFolder: vscode.Uri | undefined;
 
   static show(
     context: vscode.ExtensionContext,
@@ -134,13 +142,14 @@ export class DiagramPanel implements Listener {
 
   private dispose(): void {
     DiagramPanel.current = undefined;
-    // Presence has no UI surface outside this panel, and this is the only
-    // registered `Listener` - closing it without ending the session would
-    // leave a WebRTC link running with nowhere to show what it reports.
-    endSession();
     this.teardownCollabSync();
     for (const disposable of this.disposables.splice(0)) disposable.dispose();
     this.panel.dispose();
+    // Presence has no UI surface outside this panel, and this is the only
+    // registered `Listener` - closing it without ending the session would
+    // leave a WebRTC link running with nowhere to show what it reports.
+    // `extension.ts` owns what ending it looks like from here (task 108).
+    DiagramPanel.disposeEmitter.fire();
   }
 
   /**
@@ -153,13 +162,20 @@ export class DiagramPanel implements Listener {
    * seeding failure (no elected root, the server not answering) degrades to
    * presence-only rather than aborting the session - task 19's diagram
    * sharing must keep working even when this cannot.
+   *
+   * `targetFolder` is where a guest's adopted project will be written -
+   * required for that role, since the confirmed target is the whole point
+   * of the join flow that calls this (`extension.ts`); unused by a host.
    */
-  async beginCollabSync(sessionRole: SessionRole): Promise<void> {
+  async beginCollabSync(sessionRole: SessionRole, targetFolder?: vscode.Uri): Promise<void> {
     const doc = currentDoc();
     if (!doc) return;
     this.textBinding = new TextBinding(doc, () => this.collabRootUri);
     this.showUndoWarning();
-    if (sessionRole !== "host") return;
+    if (sessionRole !== "host") {
+      this.guestTargetFolder = targetFolder;
+      return;
+    }
 
     try {
       const subject = this.subject ?? activeSkemaFile();
@@ -193,20 +209,20 @@ export class DiagramPanel implements Listener {
 
   private async adoptProjectToDisk(): Promise<void> {
     const doc = currentDoc();
-    const folder = vscode.workspace.workspaceFolders?.[0];
+    const folder = this.guestTargetFolder;
     if (!doc) return;
     if (!folder) {
       void vscode.window.showWarningMessage(
-        "Open a folder to receive the shared project's files - joining without one shares diagram presence only.",
+        "No target folder was confirmed for this session - it shares diagram presence only.",
       );
       return;
     }
     try {
       const adopted = adoptProject(doc);
       if (adopted.files.length === 0) return;
-      await writeProjectToDisk(folder.uri, adopted.files);
+      await writeProjectToDisk(folder, adopted.files);
       if (adopted.rootPath) {
-        const rootUri = vscode.Uri.joinPath(folder.uri, ...adopted.rootPath.split("/"));
+        const rootUri = vscode.Uri.joinPath(folder, ...adopted.rootPath.split("/"));
         this.collabRootUri = rootUri.toString();
         this.textBinding?.refresh();
         const document = await vscode.workspace.openTextDocument(rootUri);
@@ -230,6 +246,7 @@ export class DiagramPanel implements Listener {
     this.undoWarning?.dispose();
     this.undoWarning = undefined;
     this.collabRootUri = undefined;
+    this.guestTargetFolder = undefined;
   }
 
   private showUndoWarning(): void {
