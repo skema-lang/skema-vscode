@@ -78,8 +78,9 @@ test("a back-reference is neither a column nor an edge", () => {
     author.fields.some((f) => f.name === "books" && f.relation),
     "the back-reference is a model field",
   );
+  const edges = relationEdges(model);
   // ...but it creates no column (docs/07) and must not be drawn as one.
-  const data = nodeData(author, {});
+  const data = nodeData(author, {}, edges);
   assert.ok(!data.columns.some((f) => f.name === "books"));
   assert.deepEqual(
     data.backReferences.map((f) => f.name),
@@ -88,7 +89,6 @@ test("a back-reference is neither a column nor an edge", () => {
 
   // And the relationship it names is already described by the `>` side, so
   // exactly one edge exists between Book and Author, not two.
-  const edges = relationEdges(model);
   const between = edges.filter(
     (e) =>
       new Set([e.source, e.target]).size === 2 &&
