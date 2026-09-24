@@ -8,6 +8,8 @@
 import { Panel } from "@xyflow/react";
 import type { JSX } from "react";
 
+import { useHiddenEdges } from "@skema/diagram";
+
 import { EDGE_ROUTINGS, usePreferences, type EdgeRouting } from "../preferences";
 
 export function DiagramToolbar(): JSX.Element {
@@ -15,6 +17,7 @@ export function DiagramToolbar(): JSX.Element {
   const setEdgeRouting = usePreferences((s) => s.setEdgeRouting);
   const snapToGrid = usePreferences((s) => s.snapToGrid);
   const setSnapToGrid = usePreferences((s) => s.setSnapToGrid);
+  const { count: hiddenEdgeCount, showAll } = useHiddenEdges();
 
   return (
     <Panel position="top-right" className="toolbar">
@@ -42,6 +45,14 @@ export function DiagramToolbar(): JSX.Element {
         />
         Snap to grid
       </label>
+
+      {hiddenEdgeCount > 0 ? (
+        <div className="toolbar__group">
+          <button type="button" className="toolbar__option" onClick={showAll}>
+            Show hidden lines ({hiddenEdgeCount})
+          </button>
+        </div>
+      ) : null}
     </Panel>
   );
 }

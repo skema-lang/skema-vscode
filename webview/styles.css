@@ -243,7 +243,8 @@ body,
   align-items: baseline;
   gap: 8px;
   height: 22px;
-  padding: 0 10px;
+  /* Right padding reserves room for .table-node__hide, present or not. */
+  padding: 0 26px 0 10px;
 }
 
 .table-node__row:hover {
@@ -281,6 +282,29 @@ body,
   font-size: 9.5px;
   min-width: 16px;
   text-align: right;
+}
+
+/* Lives in the row's reserved right gutter, not the flex flow, so it never
+   shifts or covers the flags column. */
+.table-node__hide {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--vscode-icon-foreground, var(--sk-text-muted));
+  cursor: pointer;
+}
+
+.table-node__hide.is-hidden {
+  color: var(--vscode-disabledForeground, var(--sk-text-faint));
 }
 
 /* Connection points sit on every field row, so they must be unobtrusive:
