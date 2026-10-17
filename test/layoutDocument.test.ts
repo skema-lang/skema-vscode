@@ -3,10 +3,32 @@ import { test } from "node:test";
 
 import { emptyLayout, serializeLayout } from "@skema/diagram";
 
-import { applyThenSave, loadLayout } from "../src/diagram/layoutDocument";
+import { applyThenSave, loadLayout, serializeWrites } from "../src/diagram/layoutDocument";
 
 const hiddenLine = { ...emptyLayout(), hiddenEdges: ["Order.customer"] };
 const bytesOf = (text: string): Uint8Array => new TextEncoder().encode(text);
+const layoutFile = "file:///project/.skema/layout.json";
+const otherLayoutFile = "file:///other/.skema/layout.json";
+const settle = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
+const noFailure = (error: unknown): void => assert.fail(String(error));
+
+/** A write that records each value as it starts and finishes only when the test says so. */
+function heldWrite(): {
+  started: string[];
+  finish: () => void;
+  write: (file: string, value: string) => Promise<void>;
+} {
+  const started: string[] = [];
+  const pending: Array<() => void> = [];
+  return {
+    started,
+    finish: () => pending.shift()?.(),
+    write: (_file, value) => {
+      started.push(value);
+      return new Promise((resolve) => pending.push(resolve));
+    },
+  };
+}
 
 test("an open document's unsaved text wins over the disk", async () => {
   let diskRead = false;
@@ -69,4 +91,68 @@ test("a save that throws is logged, not thrown", async () => {
   );
   assert.equal(reasons.length, 1);
   assert.match(reasons[0] ?? "", /EACCES/);
+});
+
+test("a write starts only after the previous one settles", async () => {
+  const { started, finish, write } = heldWrite();
+  const queue = serializeWrites(write, noFailure);
+  void queue(layoutFile, "first gesture");
+  await settle();
+  const done = queue(layoutFile, "second gesture");
+  await settle();
+  assert.deepEqual(started, ["first gesture"]);
+
+  finish();
+  await settle();
+  assert.deepEqual(started, ["first gesture", "second gesture"]);
+  finish();
+  await done;
+});
+
+test("a burst during a write keeps only the latest layout", async () => {
+  const { started, finish, write } = heldWrite();
+  const queue = serializeWrites(write, noFailure);
+  void queue(layoutFile, "first gesture");
+  await settle();
+  void queue(layoutFile, "second gesture");
+  const done = queue(layoutFile, "third gesture");
+
+  finish();
+  await settle();
+  finish();
+  await done;
+  assert.deepEqual(started, ["first gesture", "third gesture"]);
+});
+
+test("a layout waiting for another file is not replaced", async () => {
+  const { started, finish, write } = heldWrite();
+  const queue = serializeWrites(write, noFailure);
+  void queue(layoutFile, "first gesture");
+  await settle();
+  void queue(layoutFile, "second gesture");
+  void queue(otherLayoutFile, "other project");
+  const done = queue(layoutFile, "third gesture");
+
+  for (let step = 0; step < 3; step++) {
+    finish();
+    await settle();
+  }
+  await done;
+  assert.deepEqual(started, ["first gesture", "third gesture", "other project"]);
+});
+
+test("a failed write is reported and the next one still runs", async () => {
+  const failures: unknown[] = [];
+  const written: string[] = [];
+  const queue = serializeWrites<string>(
+    async (_file, value) => {
+      if (value === "first gesture") throw new Error("EROFS");
+      written.push(value);
+    },
+    (error) => failures.push(error),
+  );
+  void queue(layoutFile, "first gesture");
+  await queue(otherLayoutFile, "other project");
+  assert.equal(failures.length, 1);
+  assert.deepEqual(written, ["other project"]);
 });

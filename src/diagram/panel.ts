@@ -33,7 +33,7 @@ import {
   type SessionRole,
 } from "../collab/session";
 import { TextBinding } from "../collab/textBinding";
-import { applyThenSave, loadLayout } from "./layoutDocument";
+import { applyThenSave, loadLayout, serializeWrites } from "./layoutDocument";
 
 export class DiagramPanel implements Listener {
   private static current: DiagramPanel | undefined;
@@ -62,6 +62,10 @@ export class DiagramPanel implements Listener {
    *  confirmed with the user (`extension.ts`), never read from
    *  `workspaceFolders` here. Unused by a host. */
   private guestTargetFolder: vscode.Uri | undefined;
+  private readonly queueLayoutWrite = serializeWrites<DiagramLayout>(
+    (file, layout) => this.writeLayout(vscode.Uri.parse(file), layout),
+    (error) => this.client.outputChannel.appendLine(`Could not write the layout: ${String(error)}`),
+  );
 
   static show(
     context: vscode.ExtensionContext,
@@ -297,9 +301,12 @@ export class DiagramPanel implements Listener {
       case "reveal":
         void this.reveal(message);
         break;
-      case "layout":
-        void this.writeLayout(message.layout);
+      case "layout": {
+        // Resolved now: by the time a queued write runs, the panel may show another project.
+        const uri = this.layoutUri();
+        if (uri) void this.queueLayoutWrite(uri.toString(), message.layout);
         break;
+      }
       case "setPreference":
         void vscode.workspace
           .getConfiguration("skema.diagram")
@@ -374,9 +381,7 @@ export class DiagramPanel implements Listener {
    * VSCode's undo history, which is the one thing this extension has been
    * careful about everywhere else.
    */
-  private async writeLayout(layout: DiagramLayout): Promise<void> {
-    const uri = this.layoutUri();
-    if (!uri) return;
+  private async writeLayout(uri: vscode.Uri, layout: DiagramLayout): Promise<void> {
     const text = serializeLayout(layout);
 
     const edit = new vscode.WorkspaceEdit();
