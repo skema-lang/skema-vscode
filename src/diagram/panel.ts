@@ -110,6 +110,14 @@ export class DiagramPanel implements Listener {
     void DiagramPanel.current?.refresh(subject);
   }
 
+  /** `skema.restartServer` creates a new client; the open panel must stop asking the stopped one. */
+  static setClient(client: LanguageClient): void {
+    const current = DiagramPanel.current;
+    if (!current) return;
+    current.client = client;
+    void current.refresh();
+  }
+
   static sendPreferences(preferences: DiagramPreferences): void {
     DiagramPanel.current?.post({ type: "preferences", preferences });
   }
@@ -122,7 +130,7 @@ export class DiagramPanel implements Listener {
 
   private constructor(
     private readonly context: vscode.ExtensionContext,
-    private readonly client: LanguageClient,
+    private client: LanguageClient,
     private readonly panel: vscode.WebviewPanel,
     subject: vscode.Uri | undefined,
   ) {

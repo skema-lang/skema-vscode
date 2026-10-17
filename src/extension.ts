@@ -173,6 +173,7 @@ async function start(context: vscode.ExtensionContext): Promise<void> {
   }
 
   DocumentationProvider.setClient(client);
+  DiagramPanel.setClient(client);
 
   context.subscriptions.push(
     // The server re-analyzes on every edit and says so; the panel answers by
