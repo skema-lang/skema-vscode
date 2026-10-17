@@ -11,7 +11,7 @@
 import * as vscode from "vscode";
 import type { LanguageClient } from "vscode-languageclient/node";
 
-import { LAYOUT_FILE, emptyLayout, parseLayout, serializeLayout } from "@skema/diagram";
+import { LAYOUT_FILE, serializeLayout } from "@skema/diagram";
 
 import {
   MODEL_REQUEST,
@@ -33,6 +33,7 @@ import {
   type SessionRole,
 } from "../collab/session";
 import { TextBinding } from "../collab/textBinding";
+import { applyThenSave, loadLayout } from "./layoutDocument";
 
 export class DiagramPanel implements Listener {
   private static current: DiagramPanel | undefined;
@@ -359,12 +360,11 @@ export class DiagramPanel implements Listener {
   private async readLayout(): Promise<void> {
     const uri = this.layoutUri();
     if (!uri) return;
-    try {
-      const bytes = await vscode.workspace.fs.readFile(uri);
-      this.post({ type: "layout", layout: parseLayout(new TextDecoder().decode(bytes)) });
-    } catch {
-      this.post({ type: "layout", layout: emptyLayout() });
-    }
+    const open = vscode.workspace.textDocuments.find(
+      (document) => document.uri.toString() === uri.toString(),
+    );
+    const layout = await loadLayout(open?.getText(), () => vscode.workspace.fs.readFile(uri));
+    this.post({ type: "layout", layout });
   }
 
   /**
@@ -380,10 +380,11 @@ export class DiagramPanel implements Listener {
     const text = serializeLayout(layout);
 
     const edit = new vscode.WorkspaceEdit();
+    let document: vscode.TextDocument | undefined;
     try {
       // Replacing the text of an existing document is what undo understands;
       // re-creating the file would undo as a deletion.
-      const document = await vscode.workspace.openTextDocument(uri);
+      document = await vscode.workspace.openTextDocument(uri);
       const whole = new vscode.Range(
         new vscode.Position(0, 0),
         document.lineAt(document.lineCount - 1).range.end,
@@ -392,7 +393,15 @@ export class DiagramPanel implements Listener {
     } catch {
       edit.createFile(uri, { contents: new TextEncoder().encode(text), overwrite: true });
     }
-    await vscode.workspace.applyEdit(edit);
+    await applyThenSave(
+      () => vscode.workspace.applyEdit(edit),
+      // `createFile` writes the disk itself; `workspace.save(uri)` skips a document no editor shows.
+      () => document?.save() ?? Promise.resolve(true),
+      (reason) =>
+        this.client.outputChannel.appendLine(
+          `Could not save ${uri.fsPath}, the layout change stays unsaved: ${reason}`,
+        ),
+    );
   }
 
   /** The model addresses files by path; VSCode by URI. The `files` list in
