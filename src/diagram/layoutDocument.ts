@@ -14,13 +14,28 @@ export async function loadLayout(
   }
 }
 
+export interface WriteQueue<T> {
+  write(file: string, value: T): Promise<void>;
+  /** Resolves once no write for `file` is waiting or running, so a read after it sees the latest value. */
+  idle(file: string): Promise<void>;
+}
+
 /** VS Code refuses an edit computed from a superseded version, so writes run one at a time and a newer layout replaces one still waiting for its file. */
 export function serializeWrites<T>(
   write: (file: string, value: T) => PromiseLike<void>,
   reportFailure: (error: unknown) => void,
-): (file: string, value: T) => Promise<void> {
+): WriteQueue<T> {
   const waiting = new Map<string, T>();
+  const lastWrite = new Map<string, Promise<void>>();
   let settled: Promise<void> = Promise.resolve();
+
+  const report = (error: unknown): void => {
+    try {
+      reportFailure(error);
+    } catch {
+      // A reporter that throws (a disposed output channel) must not stop the writes after it.
+    }
+  };
 
   const writeLatest = async (file: string): Promise<void> => {
     const value = waiting.get(file) as T;
@@ -28,14 +43,26 @@ export function serializeWrites<T>(
     try {
       await write(file, value);
     } catch (error) {
-      reportFailure(error);
+      report(error);
     }
   };
 
-  return (file, value) => {
-    if (!waiting.has(file)) settled = settled.then(() => writeLatest(file));
-    waiting.set(file, value);
-    return settled;
+  return {
+    write: (file, value) => {
+      if (!waiting.has(file)) {
+        const written = settled.then(() => writeLatest(file));
+        settled = written;
+        lastWrite.set(file, written);
+        void written.then(() => {
+          if (lastWrite.get(file) === written) lastWrite.delete(file);
+        });
+      }
+      waiting.set(file, value);
+      return settled;
+    },
+    idle: async (file) => {
+      for (let pending = lastWrite.get(file); pending; pending = lastWrite.get(file)) await pending;
+    },
   };
 }
 

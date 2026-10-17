@@ -96,9 +96,9 @@ test("a save that throws is logged, not thrown", async () => {
 test("a write starts only after the previous one settles", async () => {
   const { started, finish, write } = heldWrite();
   const queue = serializeWrites(write, noFailure);
-  void queue(layoutFile, "first gesture");
+  void queue.write(layoutFile, "first gesture");
   await settle();
-  const done = queue(layoutFile, "second gesture");
+  const done = queue.write(layoutFile, "second gesture");
   await settle();
   assert.deepEqual(started, ["first gesture"]);
 
@@ -112,10 +112,10 @@ test("a write starts only after the previous one settles", async () => {
 test("a burst during a write keeps only the latest layout", async () => {
   const { started, finish, write } = heldWrite();
   const queue = serializeWrites(write, noFailure);
-  void queue(layoutFile, "first gesture");
+  void queue.write(layoutFile, "first gesture");
   await settle();
-  void queue(layoutFile, "second gesture");
-  const done = queue(layoutFile, "third gesture");
+  void queue.write(layoutFile, "second gesture");
+  const done = queue.write(layoutFile, "third gesture");
 
   finish();
   await settle();
@@ -127,11 +127,11 @@ test("a burst during a write keeps only the latest layout", async () => {
 test("a layout waiting for another file is not replaced", async () => {
   const { started, finish, write } = heldWrite();
   const queue = serializeWrites(write, noFailure);
-  void queue(layoutFile, "first gesture");
+  void queue.write(layoutFile, "first gesture");
   await settle();
-  void queue(layoutFile, "second gesture");
-  void queue(otherLayoutFile, "other project");
-  const done = queue(layoutFile, "third gesture");
+  void queue.write(layoutFile, "second gesture");
+  void queue.write(otherLayoutFile, "other project");
+  const done = queue.write(layoutFile, "third gesture");
 
   for (let step = 0; step < 3; step++) {
     finish();
@@ -151,8 +151,68 @@ test("a failed write is reported and the next one still runs", async () => {
     },
     (error) => failures.push(error),
   );
-  void queue(layoutFile, "first gesture");
-  await queue(otherLayoutFile, "other project");
+  void queue.write(layoutFile, "first gesture");
+  await queue.write(otherLayoutFile, "other project");
   assert.equal(failures.length, 1);
   assert.deepEqual(written, ["other project"]);
+});
+
+test("a reporter that throws does not stop the writes after it", async () => {
+  const written: string[] = [];
+  const queue = serializeWrites<string>(
+    async (_file, value) => {
+      if (value === "first gesture") throw new Error("EROFS");
+      written.push(value);
+    },
+    () => {
+      throw new Error("Channel has been closed");
+    },
+  );
+  await assert.doesNotReject(queue.write(layoutFile, "first gesture"));
+  await assert.doesNotReject(queue.write(otherLayoutFile, "other project"));
+  assert.deepEqual(written, ["other project"]);
+});
+
+test("a read waits for the write pending for its file", async () => {
+  const { finish, write } = heldWrite();
+  const queue = serializeWrites(write, noFailure);
+  let read = false;
+  void queue.write(layoutFile, "gesture");
+  const idle = queue.idle(layoutFile).then(() => {
+    read = true;
+  });
+  await settle();
+  assert.equal(read, false);
+
+  finish();
+  await idle;
+  assert.equal(read, true);
+});
+
+test("a read also waits for a write queued while it was waiting", async () => {
+  const { started, finish, write } = heldWrite();
+  const queue = serializeWrites(write, noFailure);
+  let read = false;
+  void queue.write(layoutFile, "first gesture");
+  await settle();
+  const idle = queue.idle(layoutFile).then(() => {
+    read = true;
+  });
+  void queue.write(layoutFile, "second gesture");
+
+  finish();
+  await settle();
+  assert.deepEqual(started, ["first gesture", "second gesture"]);
+  assert.equal(read, false);
+  finish();
+  await idle;
+  assert.equal(read, true);
+});
+
+test("a read does not wait for a write to another file", async () => {
+  const { finish, write } = heldWrite();
+  const queue = serializeWrites(write, noFailure);
+  void queue.write(otherLayoutFile, "other project");
+  await queue.idle(layoutFile);
+  finish();
 });

@@ -62,7 +62,7 @@ export class DiagramPanel implements Listener {
    *  confirmed with the user (`extension.ts`), never read from
    *  `workspaceFolders` here. Unused by a host. */
   private guestTargetFolder: vscode.Uri | undefined;
-  private readonly queueLayoutWrite = serializeWrites<DiagramLayout>(
+  private readonly layoutWrites = serializeWrites<DiagramLayout>(
     (file, layout) => this.writeLayout(vscode.Uri.parse(file), layout),
     (error) => this.client.outputChannel.appendLine(`Could not write the layout: ${String(error)}`),
   );
@@ -312,7 +312,7 @@ export class DiagramPanel implements Listener {
       case "layout": {
         // Resolved now: by the time a queued write runs, the panel may show another project.
         const uri = this.layoutUri();
-        if (uri) void this.queueLayoutWrite(uri.toString(), message.layout);
+        if (uri) void this.layoutWrites.write(uri.toString(), message.layout);
         break;
       }
       case "setPreference":
@@ -375,10 +375,13 @@ export class DiagramPanel implements Listener {
   private async readLayout(): Promise<void> {
     const uri = this.layoutUri();
     if (!uri) return;
+    await this.layoutWrites.idle(uri.toString());
     const open = vscode.workspace.textDocuments.find(
       (document) => document.uri.toString() === uri.toString(),
     );
     const layout = await loadLayout(open?.getText(), () => vscode.workspace.fs.readFile(uri));
+    // While this waited the panel may have moved to another project, whose own read posts its layout.
+    if (this.layoutUri()?.toString() !== uri.toString()) return;
     this.post({ type: "layout", layout });
   }
 
