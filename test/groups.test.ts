@@ -74,7 +74,7 @@ test("membership covers the members and nothing else", () => {
   assert.equal(frameOf.get("lending.Member"), groupId(lending), "a group in another file");
   assert.equal(frameOf.get("catalog.Book"), groupId(catalog));
 
-  // A box belongs to one frame at most (`docs/12`, "One table, one group"),
+  // A box belongs to one frame at most (`docs/12`, "One declaration, one group"),
   // so the map holds exactly the members and nothing invented.
   const members = model.groups.flatMap((group) => group.members);
   assert.equal(frameOf.size, members.length);
