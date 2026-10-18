@@ -164,7 +164,7 @@
     "@skema/collab-protocol": "0.6.0-rc.1",
     "@skema/diagram": "0.6.0-rc.1",
     "@skema/docs": "0.6.0-rc.1",
-    "@skema/model": "0.6.0-rc.1",
+    "@skema/model": "0.6.0",
     "@xyflow/react": "^12.11.6",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
