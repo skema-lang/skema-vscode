@@ -3,7 +3,14 @@ import { test } from "node:test";
 
 import { emptyLayout, serializeLayout } from "@skema/diagram";
 
-import { applyThenSave, loadLayout, serializeWrites } from "../src/diagram/layoutDocument";
+import {
+  applyThenSave,
+  isReadableLayout,
+  LayoutEcho,
+  layoutText,
+  loadLayout,
+  serializeWrites,
+} from "../src/diagram/layoutDocument";
 
 const hiddenLine = { ...emptyLayout(), hiddenEdges: ["Order.customer"] };
 const bytesOf = (text: string): Uint8Array => new TextEncoder().encode(text);
@@ -215,4 +222,38 @@ test("a read does not wait for a write to another file", async () => {
   void queue.write(otherLayoutFile, "other project");
   await queue.idle(layoutFile);
   finish();
+});
+
+test("the diagram's own write is an echo, an undo of it is not", () => {
+  const echo = new LayoutEcho();
+  const dragged = serializeLayout(hiddenLine);
+  echo.remember(layoutFile, dragged);
+  assert.equal(echo.isEcho(layoutFile, dragged), true);
+  assert.equal(echo.isEcho(layoutFile, serializeLayout(emptyLayout())), false);
+  assert.equal(echo.isEcho(otherLayoutFile, dragged), false);
+});
+
+test("a text shown to the diagram is not shown again", () => {
+  const echo = new LayoutEcho();
+  assert.equal(echo.isEcho(layoutFile, undefined), false);
+  echo.remember(layoutFile, undefined);
+  assert.equal(echo.isEcho(layoutFile, undefined), true);
+});
+
+test("a buffer that does not parse is not a layout to write over", () => {
+  assert.equal(isReadableLayout('{"nodes": {'), false);
+  assert.equal(isReadableLayout("42"), false);
+  assert.equal(isReadableLayout("null"), false);
+});
+
+test("a parsing or still empty buffer can be written", () => {
+  assert.equal(isReadableLayout(serializeLayout(hiddenLine)), true);
+  assert.equal(isReadableLayout(""), true);
+  assert.equal(isReadableLayout("  \n"), true);
+});
+
+test("layoutText prefers the open buffer and is undefined for an unreadable file", async () => {
+  assert.equal(await layoutText("{", async () => bytesOf("disk")), "{");
+  assert.equal(await layoutText(undefined, async () => bytesOf("disk")), "disk");
+  assert.equal(await layoutText(undefined, () => Promise.reject(new Error("gone"))), undefined);
 });
