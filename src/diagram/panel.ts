@@ -11,7 +11,7 @@
 import * as vscode from "vscode";
 import type { LanguageClient } from "vscode-languageclient/node";
 
-import { LAYOUT_FILE, serializeLayout } from "@skema/diagram";
+import { emptyLayout, LAYOUT_FILE, parseLayout, serializeLayout } from "@skema/diagram";
 
 import {
   MODEL_REQUEST,
@@ -33,7 +33,13 @@ import {
   type SessionRole,
 } from "../collab/session";
 import { TextBinding } from "../collab/textBinding";
-import { applyThenSave, loadLayout, serializeWrites } from "./layoutDocument";
+import {
+  applyThenSave,
+  isReadableLayout,
+  LayoutEcho,
+  layoutText,
+  serializeWrites,
+} from "./layoutDocument";
 
 export class DiagramPanel implements Listener {
   private static current: DiagramPanel | undefined;
@@ -62,6 +68,8 @@ export class DiagramPanel implements Listener {
    *  confirmed with the user (`extension.ts`), never read from
    *  `workspaceFolders` here. Unused by a host. */
   private guestTargetFolder: vscode.Uri | undefined;
+  private readonly layoutEcho = new LayoutEcho();
+  private layoutErrorShown = false;
   private readonly layoutWrites = serializeWrites<DiagramLayout>(
     (file, layout) => this.writeLayout(vscode.Uri.parse(file), layout),
     (error) => this.client.outputChannel.appendLine(`Could not write the layout: ${String(error)}`),
@@ -150,6 +158,8 @@ export class DiagramPanel implements Listener {
       vscode.window.onDidChangeActiveTextEditor((editor) => {
         if (editor?.document.languageId === "skema") void this.refresh(editor.document.uri);
       }),
+      vscode.workspace.onDidChangeTextDocument((event) => this.followLayout(event.document.uri)),
+      this.watchLayoutFile(),
     );
   }
 
@@ -371,18 +381,44 @@ export class DiagramPanel implements Listener {
     return vscode.Uri.joinPath(vscode.Uri.parse(root), "..", LAYOUT_FILE);
   }
 
-  /** A missing or unreadable file simply means no arrangement yet. */
-  private async readLayout(): Promise<void> {
-    const uri = this.layoutUri();
-    if (!uri) return;
-    await this.layoutWrites.idle(uri.toString());
+  private watchLayoutFile(): vscode.Disposable {
+    const watcher = vscode.workspace.createFileSystemWatcher(`**/${LAYOUT_FILE}`);
+    return vscode.Disposable.from(
+      watcher,
+      watcher.onDidChange((uri) => this.followLayout(uri)),
+      watcher.onDidCreate((uri) => this.followLayout(uri)),
+      watcher.onDidDelete((uri) => this.followLayout(uri)),
+    );
+  }
+
+  /** An undo, a hand edit or a `git checkout` changed the layout behind the diagram's back. */
+  private followLayout(changed: vscode.Uri): void {
+    if (this.layoutUri()?.toString() === changed.toString()) void this.readLayout(true);
+  }
+
+  private async layoutTextOf(uri: vscode.Uri): Promise<{ text: string | undefined; open: boolean }> {
     const open = vscode.workspace.textDocuments.find(
       (document) => document.uri.toString() === uri.toString(),
     );
-    const layout = await loadLayout(open?.getText(), () => vscode.workspace.fs.readFile(uri));
+    const text = await layoutText(open?.getText(), () => vscode.workspace.fs.readFile(uri));
+    return { text, open: open !== undefined };
+  }
+
+  /** A missing or unreadable file simply means no arrangement yet. */
+  private async readLayout(onlyIfChanged = false): Promise<void> {
+    const uri = this.layoutUri();
+    if (!uri) return;
+    const file = uri.toString();
+    await this.layoutWrites.idle(file);
+    const { text, open } = await this.layoutTextOf(uri);
     // While this waited the panel may have moved to another project, whose own read posts its layout.
-    if (this.layoutUri()?.toString() !== uri.toString()) return;
-    this.post({ type: "layout", layout });
+    if (this.layoutUri()?.toString() !== file) return;
+    if (onlyIfChanged && this.layoutEcho.isEcho(file, text)) return;
+    // Never fall back to the disk copy: keep showing what the diagram has until the buffer parses again.
+    if (open && text !== undefined && !isReadableLayout(text)) return;
+    this.layoutErrorShown = false;
+    this.layoutEcho.remember(file, text);
+    this.post({ type: "layout", layout: text === undefined ? emptyLayout() : parseLayout(text) });
   }
 
   /**
@@ -401,6 +437,10 @@ export class DiagramPanel implements Listener {
       // Replacing the text of an existing document is what undo understands;
       // re-creating the file would undo as a deletion.
       document = await vscode.workspace.openTextDocument(uri);
+      if (!isReadableLayout(document.getText())) {
+        this.warnLayoutUnreadable();
+        return;
+      }
       const whole = new vscode.Range(
         new vscode.Position(0, 0),
         document.lineAt(document.lineCount - 1).range.end,
@@ -409,6 +449,9 @@ export class DiagramPanel implements Listener {
     } catch {
       edit.createFile(uri, { contents: new TextEncoder().encode(text), overwrite: true });
     }
+    this.layoutErrorShown = false;
+    // Before the edit: the document-change event fires while applyEdit is still running.
+    this.layoutEcho.remember(uri.toString(), text);
     await applyThenSave(
       () => vscode.workspace.applyEdit(edit),
       // `createFile` writes the disk itself; `workspace.save(uri)` skips a document no editor shows.
@@ -417,6 +460,14 @@ export class DiagramPanel implements Listener {
         this.client.outputChannel.appendLine(
           `Could not save ${uri.fsPath}, the layout change stays unsaved: ${reason}`,
         ),
+    );
+  }
+
+  private warnLayoutUnreadable(): void {
+    if (this.layoutErrorShown) return;
+    this.layoutErrorShown = true;
+    void vscode.window.showWarningMessage(
+      `${LAYOUT_FILE} has errors, so changes to the diagram are not saved until it parses again.`,
     );
   }
 

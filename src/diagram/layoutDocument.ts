@@ -2,15 +2,47 @@
 import { emptyLayout, parseLayout, type DiagramLayout } from "@skema/diagram";
 
 /** An open document can hold unsaved text newer than the disk, so it wins. */
+export async function layoutText(
+  openDocumentText: string | undefined,
+  readDisk: () => PromiseLike<Uint8Array>,
+): Promise<string | undefined> {
+  if (openDocumentText !== undefined) return openDocumentText;
+  try {
+    return new TextDecoder().decode(await readDisk());
+  } catch {
+    return undefined;
+  }
+}
+
 export async function loadLayout(
   openDocumentText: string | undefined,
   readDisk: () => PromiseLike<Uint8Array>,
 ): Promise<DiagramLayout> {
-  if (openDocumentText !== undefined) return parseLayout(openDocumentText);
+  const text = await layoutText(openDocumentText, readDisk);
+  return text === undefined ? emptyLayout() : parseLayout(text);
+}
+
+/** `parseLayout` turns broken JSON into an empty layout; writing that over a hand edit in progress would destroy it. */
+export function isReadableLayout(text: string): boolean {
+  if (text.trim() === "") return true;
   try {
-    return parseLayout(new TextDecoder().decode(await readDisk()));
+    const parsed: unknown = JSON.parse(text);
+    return typeof parsed === "object" && parsed !== null;
   } catch {
-    return emptyLayout();
+    return false;
+  }
+}
+
+/** Remembers the text the diagram last showed or wrote per file, so its own write does not come back as a second render. */
+export class LayoutEcho {
+  private readonly known = new Map<string, string | undefined>();
+
+  remember(file: string, text: string | undefined): void {
+    this.known.set(file, text);
+  }
+
+  isEcho(file: string, text: string | undefined): boolean {
+    return this.known.has(file) && this.known.get(file) === text;
   }
 }
 
