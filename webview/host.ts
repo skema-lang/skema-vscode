@@ -49,7 +49,7 @@ export function revealField(field: ExportedField): void {
 }
 
 /** Records the arrangement after a gesture. Fire-and-forget: the extension
- *  writes the file and sends the result back as a `layout` message. */
+ *  writes the file and sends nothing back. */
 export function saveLayout(layout: DiagramLayout): void {
   post({ type: "layout", layout });
 }

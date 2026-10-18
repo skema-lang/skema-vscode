@@ -44,9 +44,13 @@ import {
 } from "./collab/session";
 import { DiagramPanel, readPreferences } from "./diagram/panel";
 import { DocumentationProvider, renderDocumentation } from "./docs/provider";
+import { oneAtATime } from "./lifecycle";
 import { ServerNotFound, resolveServer } from "./server";
 
 let client: LanguageClient | undefined;
+let clientResources: vscode.Disposable | undefined;
+// languageclient refuses to stop a client that is still starting, and an overlapping start would orphan a server.
+const serverLifecycle = oneAtATime();
 let output: vscode.OutputChannel;
 /** Set once a join wrote into a folder that was not already open, so
  *  `endCollabSession` can offer to open it now that reloading is harmless. */
@@ -75,10 +79,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       void DocumentationProvider.show(vscode.window.activeTextEditor?.document.uri);
     }),
     vscode.commands.registerCommand("skema.exportDocumentation", () => exportDocumentation()),
-    vscode.commands.registerCommand("skema.restartServer", async () => {
-      await stop();
-      await start(context);
-    }),
+    vscode.commands.registerCommand("skema.restartServer", () => restart(context)),
     vscode.commands.registerCommand("skema.collab.startSession", () => startCollabSession(context)),
     vscode.commands.registerCommand("skema.collab.invite", () => inviteToCollabSession()),
     vscode.commands.registerCommand("skema.collab.completeSession", () => completeCollabSession()),
@@ -92,8 +93,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     // option has to reach the open panel.
     vscode.workspace.onDidChangeConfiguration(async (event) => {
       if (event.affectsConfiguration("skema.serverPath")) {
-        await stop();
-        await start(context);
+        await restart(context);
       }
       if (event.affectsConfiguration("skema.diagram")) {
         DiagramPanel.sendPreferences(readPreferences());
@@ -104,7 +104,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // Registered before the server start is awaited: an empty window activates
   // on "onUri" alone, and the handler waits out `starting` itself rather
   // than assuming the client is already there.
-  const starting = start(context);
+  const starting = serverLifecycle(() => start(context));
   context.subscriptions.push(
     vscode.window.registerUriHandler({
       handleUri: (uri) => void handleUri(context, uri, starting),
@@ -128,7 +128,14 @@ async function handleUri(
 }
 
 export async function deactivate(): Promise<void> {
-  await stop();
+  await serverLifecycle(stop);
+}
+
+function restart(context: vscode.ExtensionContext): Promise<void> {
+  return serverLifecycle(async () => {
+    await stop();
+    await start(context);
+  });
 }
 
 async function start(context: vscode.ExtensionContext): Promise<void> {
@@ -148,6 +155,8 @@ async function start(context: vscode.ExtensionContext): Promise<void> {
   const run = { command: location.command, transport: TransportKind.stdio };
   const serverOptions: ServerOptions = { run, debug: run };
 
+  // languageclient disposes only its listeners on stop, never the watcher itself.
+  const skemaFiles = vscode.workspace.createFileSystemWatcher("**/*.skema");
   const clientOptions: LanguageClientOptions = {
     documentSelector: [{ scheme: "file", language: "skema" }],
     outputChannel: output,
@@ -155,16 +164,18 @@ async function start(context: vscode.ExtensionContext): Promise<void> {
       // The server elects a project's root file by scanning the workspace,
       // so it has to hear about `.skema` files appearing, moving or being
       // deleted - not only about the ones an editor has open.
-      fileEvents: vscode.workspace.createFileSystemWatcher("**/*.skema"),
+      fileEvents: skemaFiles,
     },
   };
 
-  client = new LanguageClient("skema", "skema", serverOptions, clientOptions);
+  const started = new LanguageClient("skema", "skema", serverOptions, clientOptions);
+  client = started;
 
   try {
-    await client.start();
+    await started.start();
   } catch (error) {
     client = undefined;
+    skemaFiles.dispose();
     void vscode.window.showErrorMessage(
       `Could not start the skema language server (${location.command}, ${location.origin}): ${String(error)}. ` +
         "Set skema.serverPath to a skema-lsp binary.",
@@ -172,13 +183,15 @@ async function start(context: vscode.ExtensionContext): Promise<void> {
     return;
   }
 
-  DocumentationProvider.setClient(client);
+  DocumentationProvider.setClient(started);
+  DiagramPanel.setClient(started);
 
-  context.subscriptions.push(
+  clientResources = vscode.Disposable.from(
+    skemaFiles,
     // The server re-analyzes on every edit and says so; the panel answers by
     // asking for the model, but only while one is open - a notification is
     // cheap, a model is not.
-    client.onNotification(MODEL_CHANGED_NOTIFICATION, () => {
+    started.onNotification(MODEL_CHANGED_NOTIFICATION, () => {
       if (DiagramPanel.isOpen()) DiagramPanel.refreshCurrent();
       DocumentationProvider.refresh();
     }),
@@ -188,6 +201,8 @@ async function start(context: vscode.ExtensionContext): Promise<void> {
 async function stop(): Promise<void> {
   const running = client;
   client = undefined;
+  clientResources?.dispose();
+  clientResources = undefined;
   DocumentationProvider.setClient(undefined);
   if (running) await running.stop();
 }

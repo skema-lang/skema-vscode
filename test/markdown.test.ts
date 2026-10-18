@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 
 import { modelToMarkdown } from "@skema/docs";
+import type { ExportedModel } from "@skema/model";
 import type { ModelResponse } from "../shared/protocol";
 import { getNoteFrom } from "../src/docs/notes";
 
@@ -65,6 +66,15 @@ test("groups list their members, qualified", () => {
 });
 
 test("an empty model says so instead of rendering nothing", () => {
-  const empty = modelToMarkdown({ tables: [], enums: [], groups: [], dialect: undefined }, () => undefined);
+  // Asserted: in an @skema/model without `documents`/`datatypes` these are excess keys.
+  const emptyModel = {
+    tables: [],
+    enums: [],
+    groups: [],
+    documents: [],
+    datatypes: [],
+    dialect: undefined,
+  } as ExportedModel;
+  const empty = modelToMarkdown(emptyModel, () => undefined);
   assert.match(empty, /Nothing to document yet/);
 });

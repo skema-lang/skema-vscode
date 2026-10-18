@@ -2,7 +2,7 @@
   "name": "skemavscode",
   "displayName": "skema",
   "description": "Editing support and a live ER diagram for the skema modelling DSL",
-  "version": "0.6.0",
+  "version": "0.6.1-rc.5",
   "private": true,
   "license": "MIT",
   "publisher": "skema",
@@ -161,10 +161,10 @@
   },
   "dependencies": {
     "@dagrejs/dagre": "^3.1.1",
-    "@skema/collab-protocol": "0.4.0",
-    "@skema/diagram": "0.4.0",
-    "@skema/docs": "0.4.0",
-    "@skema/model": "0.4.0",
+    "@skema/collab-protocol": "0.6.0",
+    "@skema/diagram": "0.6.0",
+    "@skema/docs": "0.6.0",
+    "@skema/model": "0.6.0",
     "@xyflow/react": "^12.11.6",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
@@ -184,6 +184,9 @@
     "@vscode/vsce": "^3.2.0",
     "esbuild": "^0.25.0",
     "typescript": "^5.7.2"
+  },
+  "overrides": {
+    "@skema/model": "$@skema/model"
   },
   "skemaServer": {
     "comment": "Which skema-lsp release `npm run fetch:server` bundles: v<the @skema/model dependency's version>, since both come from the same skema-lang release. Override with SKEMA_SERVER_VERSION to pull a different one on purpose.",
